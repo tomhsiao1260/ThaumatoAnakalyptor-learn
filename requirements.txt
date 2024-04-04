@@ -1,5 +1,12 @@
 dill==0.3.8
+imageio==2.34.0
+lazy_loader==0.3
 multiprocess==0.70.16
+networkx==3.2.1
 numpy==1.26.4
+packaging==24.0
+pillow==10.3.0
+scikit-image==0.22.0
+scipy==1.13.0
 tifffile==2024.2.12
 tqdm==4.66.2

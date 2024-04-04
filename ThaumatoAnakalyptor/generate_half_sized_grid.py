@@ -2,6 +2,7 @@
 
 import os
 import tifffile
+import numpy as np
 from tqdm import tqdm
 from skimage.transform import resize
 from multiprocessing import Pool, cpu_count
@@ -60,8 +61,20 @@ def downsample_folder_tifs(input_directory, output_directory, downsample_factor,
 
     print('Downsampling complete.')
 
+def generate_grid_blocks(directory_path, block_size, num_threads):
+    block_directory = directory_path + '_grids'
+    os.makedirs(block_directory, exist_ok=True)
+    tif_files = sorted([f for f in os.listdir(directory_path) if f.endswith('.tif')])
+
+    sample_image = tifffile.imread(os.path.join(directory_path, tif_files[0]))
+    nz, ny, nx = len(tif_files), *sample_image.shape
+    blocks_in_x, blocks_in_y, blocks_in_z = (int(np.ceil(d / block_size)) for d in (nx, ny, nz))
+
+    print(blocks_in_x, blocks_in_y, blocks_in_z)
+
 def compute(input_directory, output_directory, downsample_factor, num_threads):
     downsample_folder_tifs(input_directory, output_directory, downsample_factor, num_threads)
+    generate_grid_blocks(output_directory, 500, num_threads)
 
 def main():
     input_directory = '../../full-scrolls/Scroll1.volpkg/volumes/20230205180739'
