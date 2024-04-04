@@ -2,5 +2,5 @@
 
 env/
 __pycache__/
-output/
-output_grids/
+2dtifs_8um/
+2dtifs_8um_grids/

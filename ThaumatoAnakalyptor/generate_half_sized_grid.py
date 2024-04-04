@@ -61,6 +61,24 @@ def downsample_folder_tifs(input_directory, output_directory, downsample_factor,
 
     print('Downsampling complete.')
 
+def process_block(args):
+    bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files = args
+    block_directory = directory_path + '_grids'
+    block = np.zeros((block_size, block_size, block_size), dtype=np.uint16)
+    block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
+    block_path = os.path.join(block_directory, block_filename)
+
+    for z in range(block_size):
+        z_index = bz * block_size + z
+        if z_index >= nz:
+            break
+        image_path = os.path.join(directory_path, tif_files[z_index])
+        image_slice = tifffile.imread(image_path)
+        y_slice, x_slice = (slice(b * block_size, min((b + 1) * block_size, d)) for b, d in ((by, ny), (bx, nx)))
+        block[z, :y_slice.stop - y_slice.start, :x_slice.stop - x_slice.start] = image_slice[y_slice, x_slice]
+
+    tifffile.imwrite(block_path, block)
+
 def generate_grid_blocks(directory_path, block_size, num_threads):
     block_directory = directory_path + '_grids'
     os.makedirs(block_directory, exist_ok=True)
@@ -70,7 +88,16 @@ def generate_grid_blocks(directory_path, block_size, num_threads):
     nz, ny, nx = len(tif_files), *sample_image.shape
     blocks_in_x, blocks_in_y, blocks_in_z = (int(np.ceil(d / block_size)) for d in (nx, ny, nz))
 
-    print(blocks_in_x, blocks_in_y, blocks_in_z)
+    tasks = [(bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files) 
+        for bz in range(blocks_in_z) for by in range(blocks_in_y) for bx in range(blocks_in_x)]
+    
+    # multiprocessing
+    num_pools = max(1, num_threads // 3)
+    with Pool(processes=num_pools) as pool:
+        for _ in tqdm(pool.imap_unordered(process_block, tasks), total=len(tasks)):
+            pass
+
+    print('Grid blocks have been generated.')
 
 def compute(input_directory, output_directory, downsample_factor, num_threads):
     downsample_folder_tifs(input_directory, output_directory, downsample_factor, num_threads)
@@ -78,7 +105,7 @@ def compute(input_directory, output_directory, downsample_factor, num_threads):
 
 def main():
     input_directory = '../../full-scrolls/Scroll1.volpkg/volumes/20230205180739'
-    output_directory = '../output'
+    output_directory = '../2dtifs_8um'
     downsample_factor = 2
     num_threads = cpu_count()
 
