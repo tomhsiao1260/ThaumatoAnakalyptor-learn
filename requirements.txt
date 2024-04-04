@@ -1,0 +1,5 @@
+dill==0.3.8
+multiprocess==0.70.16
+numpy==1.26.4
+tifffile==2024.2.12
+tqdm==4.66.2
