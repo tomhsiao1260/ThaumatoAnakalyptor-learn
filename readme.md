@@ -19,3 +19,7 @@ Try to learn [ThaumatoAnakalyptor](https://github.com/schillij95/ThaumatoAnakaly
 #### umbilicus
 
 `umbilicus.txt` 紀錄了一系列卷軸的中心座標 (y, z, x)，透過 `load_xyz_from_file` 方法解析成 numpy，再透過 `umbilicus` 方法沿著 z 軸內插，產生連續的資料點。
+
+#### save_surface_ply
+
+ply 的儲存，有 vertices, normals, colors 三種資料，前兩者為 (y, z, x)，後者為 (r, g, b)。

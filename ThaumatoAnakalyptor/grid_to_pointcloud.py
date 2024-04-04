@@ -2,9 +2,33 @@
 
 import os
 import numpy as np
+import open3d as o3d
 from scipy.interpolate import interp1d
 
 CFG = {'num_threads': 4, 'GPUs': 1}
+
+def save_surface_ply(surface_points, normals, filename, color=None):
+    try:
+        if (len(surface_points)  < 1):
+            return
+        # Create an Open3D point cloud object and populate it
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(surface_points.astype(np.float32))
+        pcd.normals = o3d.utility.Vector3dVector(normals.astype(np.float16))
+        if color is not None:
+            pcd.colors = o3d.utility.Vector3dVector(color.astype(np.float16))
+
+        # Create folder if it doesn't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        # Save to a temporary file first to ensure data integrity
+        temp_filename = filename.replace(".ply", "_temp.ply")
+        o3d.io.write_point_cloud(temp_filename, pcd)
+
+        # Rename the temp file to the original filename
+        os.rename(temp_filename, filename)
+    except Exception as e:
+        print(f"Error saving surface PLY: {e}")
 
 def load_xyz_from_file(filename='umbilicus.txt'):
     """
@@ -45,11 +69,16 @@ def compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus):
     CFG['GPUs'] = gpus
 
     umbilicus_path = '../umbilicus.txt'
+    save_umbilicus_path = umbilicus_path.replace(".txt", ".ply")
 
     # Usage
     umbilicus_raw_points = load_xyz_from_file(umbilicus_path)
     umbilicus_points = umbilicus(umbilicus_raw_points)
-    print(umbilicus_raw_points, umbilicus_points.shape)
+    # Red color for umbilicus
+    colors = np.zeros_like(umbilicus_points)
+    colors[:,0] = 1.0
+    # Save umbilicus as a PLY file, for visualization (CloudCompare)
+    save_surface_ply(umbilicus_points, np.zeros_like(umbilicus_points), save_umbilicus_path, color=colors)
 
 def main():
     base_path = ""
