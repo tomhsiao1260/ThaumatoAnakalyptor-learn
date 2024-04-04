@@ -15,3 +15,7 @@ Try to learn [ThaumatoAnakalyptor](https://github.com/schillij95/ThaumatoAnakaly
 根據 `2dtifs_8um` 裡的資料，產生三維大小為 500, 500, 500 的 grids 資料，並將結果存在 `2dtifs_8um_grids` 資料夾。過程中會先計算 `blocks_in_x, blocks_in_y, blocks_in_z` 表示在不同軸的 grid 個數，然後非同步的分派任務給 `process_block` 方法，逐一產生 `cell_yxz_....tif` 檔。另外，`standard_size` 參數紀錄了單一 grid 的檔案大小，若過去產生過 grid 了，則能透過這個參數跳過重新產生的過程，如果是第一次跑，這個數值是 -1，grid 會從頭生成。
 
 ### grid_to_pointcloud.py
+
+#### umbilicus
+
+`umbilicus.txt` 紀錄了一系列卷軸的中心座標 (y, z, x)，透過 `load_xyz_from_file` 方法解析成 numpy，再透過 `umbilicus` 方法沿著 z 軸內插，產生連續的資料點。
