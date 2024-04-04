@@ -62,11 +62,17 @@ def downsample_folder_tifs(input_directory, output_directory, downsample_factor,
     print('Downsampling complete.')
 
 def process_block(args):
-    bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files = args
+    bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files, standard_size = args
     block_directory = directory_path + '_grids'
     block = np.zeros((block_size, block_size, block_size), dtype=np.uint16)
     block_filename = f"cell_yxz_{by+1:03}_{bx+1:03}_{bz+1:03}.tif"
     block_path = os.path.join(block_directory, block_filename)
+
+    if os.path.exists(block_path) and os.path.getsize(block_path) == standard_size:
+        print(f"'{block_filename}' already exists in the output directory. Skipping.")
+        return  # Skip if file exists and size matches
+    elif os.path.exists(block_path):
+        print(f"Warning: '{block_filename}' exists but has the wrong size. Overwriting. {os.path.getsize(block_path)} != {block_size**3 * np.uint16().itemsize}")
 
     for z in range(block_size):
         z_index = bz * block_size + z
@@ -88,7 +94,21 @@ def generate_grid_blocks(directory_path, block_size, num_threads):
     nz, ny, nx = len(tif_files), *sample_image.shape
     blocks_in_x, blocks_in_y, blocks_in_z = (int(np.ceil(d / block_size)) for d in (nx, ny, nz))
 
-    tasks = [(bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files) 
+    # Get standard_size. is -1 if not at least two cells exist and first two not having the same size
+    standard_size = -1
+    # get grid cells
+    grid_cells = [f for f in os.listdir(directory_path + '_grids') if f.endswith('.tif') and f.startswith('cell_yxz_')]
+    if len(grid_cells) >= 2:
+        # get first two grid cells
+        grid_cell_1 = tifffile.imread(os.path.join(directory_path + '_grids', grid_cells[0]))
+        grid_cell_1_size = os.path.getsize(os.path.join(directory_path + '_grids', grid_cells[0]))
+        grid_cell_2 = tifffile.imread(os.path.join(directory_path + '_grids', grid_cells[1]))
+        grid_cell_2_size = os.path.getsize(os.path.join(directory_path + '_grids', grid_cells[1]))
+        if grid_cell_1.shape == grid_cell_2.shape and grid_cell_1_size == grid_cell_2_size:
+            standard_size = grid_cell_1_size
+            print(f"Found standard size: {standard_size}")
+
+    tasks = [(bz, by, bx, directory_path, block_size, nz, ny, nx, tif_files, standard_size) 
         for bz in range(blocks_in_z) for by in range(blocks_in_y) for bx in range(blocks_in_x)]
     
     # multiprocessing
