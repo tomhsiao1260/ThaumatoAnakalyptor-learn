@@ -1,11 +1,35 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
 import os
+import tifffile
 from tqdm import tqdm
+from skimage.transform import resize
 from multiprocessing import Pool, cpu_count
 
-def downsample_image(tasks):
-    print(tasks)
+def downsample_image(args):
+    input_directory, output_directory, filename, downsample_factor = args
+    filepath = os.path.join(input_directory, filename)
+    output_path = os.path.join(output_directory, filename)
+
+    # Check if image already exists in the output directory
+    if os.path.exists(output_path):
+        return f"'{filename}' already exists in the output directory. Skipping."
+    # print(f"Downsampling {filename}.")
+    
+    with tifffile.TiffFile(filepath) as tif:
+        image = tif.asarray()
+        # Check if the image is not empty
+        if image.size == 0:
+            return f"Warning: '{filename}' is empty. Skipping."
+        # Downsample the image using the specified factor
+        downsampled_image = resize(image, 
+                                   (image.shape[0] // downsample_factor, image.shape[1] // downsample_factor),
+                                   anti_aliasing=False,
+                                   preserve_range=True).astype(image.dtype)
+
+        # Save the downsampled image
+        tifffile.imwrite(output_path, downsampled_image)
+    return f"Downsampled and saved '{filename}'."
 
 def downsample_folder_tifs(input_directory, output_directory, downsample_factor, num_threads):
     if downsample_factor == 1:
