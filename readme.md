@@ -23,3 +23,7 @@ Try to learn [ThaumatoAnakalyptor](https://github.com/schillij95/ThaumatoAnakaly
 #### save_surface_ply
 
 ply 的儲存，有 vertices, normals, colors 三種資料，前兩者為 (y, z, x)，後者為 (r, g, b)。
+
+#### grid_inference
+
+為核心程式碼，有 `GridDataset`、`DataLoader`、`PointCloudModel` 等等的資料準備和計算過程。

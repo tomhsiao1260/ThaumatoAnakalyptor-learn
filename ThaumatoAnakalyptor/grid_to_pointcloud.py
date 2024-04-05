@@ -1,6 +1,10 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
+import torch
+from torch.utils.data import Dataset
+
 import os
+import multiprocessing
 import numpy as np
 import open3d as o3d
 from scipy.interpolate import interp1d
@@ -64,12 +68,32 @@ def umbilicus(points_array):
     # Return the combined y, z, and x values as a 2D array
     return np.column_stack((y_new, z_new, x_new))
 
-def compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus):
+class GridDataset(Dataset):
+    def __init__(self, path_template, umbilicus_points, grid_block_size=200):
+        self.grid_block_size = grid_block_size
+        self.path_template = path_template
+        self.umbilicus_points = umbilicus_points
+
+    def __len__(self):
+        pass
+
+    def __getitem__(self, idx):
+        pass
+
+def grid_inference(path_template, umbilicus_points, grid_block_size=200):
+    dataset = GridDataset(path_template, umbilicus_points, grid_block_size=grid_block_size)
+
+    return
+
+def compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus, skip_surface_blocks):
     CFG['num_threads'] = num_threads
     CFG['GPUs'] = gpus
 
     umbilicus_path = '../umbilicus.txt'
     save_umbilicus_path = umbilicus_path.replace(".txt", ".ply")
+
+    src_dir = base_path + "/" + volume_subpath + "/"
+    path_template = src_dir + "cell_yxz_{:03}_{:03}_{:03}.tif"
 
     # Usage
     umbilicus_raw_points = load_xyz_from_file(umbilicus_path)
@@ -80,14 +104,23 @@ def compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus):
     # Save umbilicus as a PLY file, for visualization (CloudCompare)
     save_surface_ply(umbilicus_points, np.zeros_like(umbilicus_points), save_umbilicus_path, color=colors)
 
+    # Starting grid block at corner (3000, 4000, 2000) to match cell_yxz_006_008_004
+    # (2600, 2200, 5000)
+    if not skip_surface_blocks:
+        # compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
+        grid_inference(path_template, umbilicus_points, grid_block_size=200)
+    else:
+        print("Skipping surface block computation.")
+
 def main():
     base_path = ""
     volume_subpath = "../2dtifs_8um_grids"
     pointcloud_subpath = "../point_cloud"
     num_threads = CFG['num_threads']
     gpus = CFG['GPUs']
+    skip_surface_blocks = False
 
-    compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus)
+    compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus, skip_surface_blocks)
 
 if __name__ == "__main__":
     main()
