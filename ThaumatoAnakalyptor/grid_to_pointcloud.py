@@ -216,7 +216,13 @@ class MyPredictionWriter(BasePredictionWriter):
             # print("Prediction is empty")
             return
         
-        print('batch predition: ', prediction)
+        grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings = prediction
+        grid_volumes = grid_volumes[0]
+        grid_volumes = grid_volumes.numpy()
+        grid_volumes = np.uint8(grid_volumes)
+
+        print('batch end & grid size:', grid_volumes.shape)
+        tifffile.imwrite('output.tif', grid_volumes) 
 
 class GridDataset(Dataset):
     def __init__(self, pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
@@ -224,6 +230,7 @@ class GridDataset(Dataset):
         self.path_template = path_template
         self.umbilicus_points = umbilicus_points
         self.blocks_to_process = self.init_blocks_to_process(pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+        self.blocks_to_process = self.blocks_to_process[30:31]
 
         self.writer = MyPredictionWriter(grid_block_size=grid_block_size)
 
@@ -354,7 +361,7 @@ class PointCloudModel(pl.LightningModule):
         # Extract input information
         grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings = x
 
-        return 'some forward result here'
+        return grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings
 
 def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1, batch_size=1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
@@ -422,3 +429,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # path_template = os.path.join('../2dtifs_8um_grids', "cell_yxz_{:03}_{:03}_{:03}.tif")
+
+    # grid_block = load_grid(path_template, (3000, 4000, 2000), 200)
+    # grid_block = torch.from_numpy(grid_block).float() 
+    # grid_block = np.uint8(grid_block.numpy())
+    # print(np.max(grid_block))
+
+    # tifffile.imwrite('output.tif', grid_block) 
