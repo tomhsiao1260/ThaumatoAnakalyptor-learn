@@ -2,6 +2,7 @@
 
 import torch
 from torch.utils.data import Dataset, DataLoader
+import pytorch_lightning as pl
 
 import os
 import tifffile
@@ -314,6 +315,15 @@ def custom_collate_fn(batches):
     # Return a single batch containing all aggregated items
     return blocks, reference_vectors, corner_coordss, grid_block_sizes, paddings
 
+class PointCloudModel(pl.LightningModule):
+    def __init__(self):
+        print("instantiating model")
+        super().__init__()
+
+    def forward(self, x):
+        # Extract input information
+        grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings = x
+
 def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1, batch_size=1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(CFG['GPUs']))
@@ -321,6 +331,7 @@ def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points
     num_workers = min(num_threads, num_treads_for_gpus)
     num_workers = max(num_workers, 1)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=3)
+    model = PointCloudModel()
 
     return
 
