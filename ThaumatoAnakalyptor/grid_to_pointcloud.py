@@ -98,6 +98,42 @@ def umbilicus(points_array):
     # Return the combined y, z, and x values as a 2D array
     return np.column_stack((y_new, z_new, x_new))
 
+def umbilicus_xy_at_z(points_array, z_new):
+    """
+    Interpolate between points in the provided 2D array based on z values.
+
+    :param points_array: A 2D numpy array of shape (n, 3) with y, z, and x coordinates.
+    :return: A 2D numpy array with interpolated points for each 1 step in the z direction.
+    """
+
+    # Separate the coordinates
+    y, z, x = points_array.T
+
+    # Create interpolation functions for x and y based on z
+    fx = interp1d(z, x, kind='linear', fill_value="extrapolate")
+    fy = interp1d(z, y, kind='linear', fill_value="extrapolate")
+
+    # Calculate interpolated x and y values
+    x_new = fx(z_new)
+    y_new = fy(z_new)
+
+    # Return the combined y, z, and x values as a 2D array
+    res = np.array([y_new, z_new, x_new])
+    return res
+
+# fixing the pointcloud because of computation with too short umbilicus
+def skip_computation_block(corner_coords, grid_block_size, umbilicus_points, maximum_distance=2500):
+    if maximum_distance <= 0:
+        return False
+
+    block_point = np.array(corner_coords) + grid_block_size//2
+    umbilicus_point = umbilicus_xy_at_z(umbilicus_points, block_point[2])
+    umbilicus_point = umbilicus_point[[0, 2, 1]] # ply to corner coords
+
+    umbilicus_point_dist = umbilicus_point - block_point
+    umbilicus_point_dist = np.linalg.norm(umbilicus_point_dist)
+    return umbilicus_point_dist > maximum_distance
+
 class GridDataset(Dataset):
     def __init__(self, pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
         self.grid_block_size = grid_block_size
@@ -145,6 +181,17 @@ class GridDataset(Dataset):
                 blocks_processed.add(corner_coords)
                 # Outside of the scroll, don't add neighbors
                 continue
+            # this next check comes after the empty check, else under certain umbilicus distances, there might be an infinite loop
+            skip_computation_flag = skip_computation_block(corner_coords, grid_block_size, umbilicus_points, maximum_distance=maximum_distance)
+            if skip_computation_flag:
+                # Block not needed in processing
+                blocks_processed.add(corner_coords)
+            else:
+                # Otherwise add corner coords to the blocks that need processing
+                blocks_to_process.add(corner_coords)
+
+            print('Need to Process:', blocks_to_process)
+            print('Finished Process', blocks_processed)
 
     def __len__(self):
         pass
@@ -165,8 +212,8 @@ def compute(base_path, volume_subpath, pointcloud_subpath, maximum_distance, rec
     umbilicus_path = '../umbilicus.txt'
     save_umbilicus_path = umbilicus_path.replace(".txt", ".ply")
 
-    src_dir = base_path + "/" + volume_subpath + "/"
-    path_template = src_dir + "cell_yxz_{:03}_{:03}_{:03}.tif"
+    src_dir = os.path.join(base_path, volume_subpath)
+    path_template = os.path.join(src_dir, "cell_yxz_{:03}_{:03}_{:03}.tif")
 
     # Usage
     umbilicus_raw_points = load_xyz_from_file(umbilicus_path)
