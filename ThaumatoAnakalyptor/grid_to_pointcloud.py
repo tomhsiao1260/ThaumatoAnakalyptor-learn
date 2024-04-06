@@ -11,6 +11,36 @@ from scipy.interpolate import interp1d
 
 CFG = {'num_threads': 4, 'GPUs': 1}
 
+def grid_empty(path_template, cords, grid_block_size=500, cell_block_size=500):
+    """
+    Determines wheter a grid block is empty or not.
+        path_template: Template for the path to load individual grid files
+        cords: Tuple (y, x, z) representing the corner coordinates of the grid block
+        grid_block_size: Size of the grid block
+        cell_block_size: Size of the individual grid files
+    """
+    # make grid_block_size an array with 3 elements
+    if isinstance(grid_block_size, int):
+        grid_block_size = np.array([grid_block_size, grid_block_size, grid_block_size])
+    
+    # Convert corner coordinates to file indices and generate the file path
+    # Starting indices
+    file_y_start, file_x_start, file_z_start = cords[0]//cell_block_size, cords[1]//cell_block_size, cords[2]//cell_block_size
+    # Ending indices
+    file_y_end, file_x_end, file_z_end = (cords[0] + grid_block_size[0])//cell_block_size, (cords[1] + grid_block_size[1])//cell_block_size, (cords[2] + grid_block_size[2])//cell_block_size
+
+    # Check wheter none of the files exist
+    for file_y in range(file_y_start, file_y_end + 1):
+        for file_x in range(file_x_start, file_x_end + 1):
+            for file_z in range(file_z_start, file_z_end + 1):
+                path = path_template.format(file_y, file_x, file_z)
+
+                # Check if the file exists
+                if os.path.exists(path):
+                    return False
+    
+    return True
+
 def save_surface_ply(surface_points, normals, filename, color=None):
     try:
         if (len(surface_points)  < 1):
@@ -96,15 +126,25 @@ class GridDataset(Dataset):
         return computed_blocks
     
     def blocks_to_compute(self, start_coord, computed_blocks, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance):
-        print('start_coord: ', start_coord)
-        print('computed_blocks: ', computed_blocks)
-        print('umbilicus_points.shape: ', umbilicus_points.shape)
-        print('umbilicus_points_old: ', umbilicus_points_old)
-        print('path_template: ', path_template)
-        print('grid_block_size: ', grid_block_size)
-        print('recompute: ', recompute)
-        print('fix_umbilicus: ', fix_umbilicus)
-        print('maximum_distance: ', maximum_distance)
+        padding = 50
+
+        all_corner_coords = set() # Set containing all the corner coords that need to be placed into processing/processed set.
+        all_corner_coords.add(start_coord) # Add the start coord to the set of all corner coords
+        blocks_to_process = set() # Blocks that need to be processed
+        blocks_processed = set() # Set to hold the blocks that do not need to be processed. Either have been processed or don't need to be processed.
+
+        while len(all_corner_coords) > 0:
+            corner_coords = all_corner_coords.pop()
+
+            # Load the grid block from corner_coords and grid size
+            corner_coords_padded = np.array(corner_coords) - padding
+            grid_block_size_padded = grid_block_size + 2 * padding
+
+            # Check if the block is empty
+            if grid_empty(path_template, corner_coords_padded, grid_block_size=grid_block_size_padded):
+                blocks_processed.add(corner_coords)
+                # Outside of the scroll, don't add neighbors
+                continue
 
     def __len__(self):
         pass
