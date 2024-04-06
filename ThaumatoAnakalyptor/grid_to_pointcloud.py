@@ -3,6 +3,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import BasePredictionWriter
 
 import os
 import tifffile
@@ -193,12 +194,30 @@ def skip_computation_block(corner_coords, grid_block_size, umbilicus_points, max
     umbilicus_point_dist = np.linalg.norm(umbilicus_point_dist)
     return umbilicus_point_dist > maximum_distance
 
+class MyPredictionWriter(BasePredictionWriter):
+    def __init__(self, grid_block_size=200):
+        super().__init__(write_interval="batch")  # or "epoch" for end of an epoch
+        # num_threads = multiprocessing.cpu_count()
+        # self.pool = multiprocessing.Pool(processes=num_threads)  # Initialize the pool once
+
+        self.grid_block_size = grid_block_size
+
+    def write_on_predict(self, predictions: list, batch_indices: list, dataloader_idx: int, batch, batch_idx: int, dataloader_len: int):
+        # Example: Just print the predictions
+        print(predictions)
+        print("On predict")
+
+    def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
+        print("Batch end")
+
 class GridDataset(Dataset):
     def __init__(self, pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
         self.grid_block_size = grid_block_size
         self.path_template = path_template
         self.umbilicus_points = umbilicus_points
         self.blocks_to_process = self.init_blocks_to_process(pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+
+        self.writer = MyPredictionWriter(grid_block_size=grid_block_size)
 
     def init_blocks_to_process(self, pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance):
         # Load the set of computed blocks
@@ -267,6 +286,9 @@ class GridDataset(Dataset):
 
         return blocks_to_process, blocks_processed
     
+    def get_writer(self):
+        return self.writer
+    
     def get_reference_vector(self, corner_coords):
         block_point = np.array(corner_coords) + self.grid_block_size//2
         umbilicus_point = umbilicus_xy_at_z(self.umbilicus_points, block_point[2])
@@ -332,6 +354,10 @@ def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points
     num_workers = max(num_workers, 1)
     dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=3)
     model = PointCloudModel()
+
+    writer = dataset.get_writer()
+    trainer = pl.Trainer(callbacks=[writer], strategy="ddp")
+    # trainer = pl.Trainer(callbacks=[writer], gpus=int(CFG['GPUs']), strategy="ddp")
 
     return
 
