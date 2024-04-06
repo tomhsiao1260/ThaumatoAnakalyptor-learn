@@ -148,9 +148,6 @@ class GridDataset(Dataset):
         # Initialize the blocks that need computing
         blocks_to_process, blocks_processed = self.blocks_to_compute(start_block, computed_blocks, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
         blocks_to_process = sorted(list(blocks_to_process)) # Sort the blocks to process for deterministic behavior
-
-        print('Need to Process:', blocks_to_process)
-        print('Length: ', len(blocks_to_process))
         return blocks_to_process
 
     def load_computed_blocks(self, pointcloud_base):
@@ -210,12 +207,26 @@ class GridDataset(Dataset):
                             all_corner_coords.add(neighbor_coords)
 
         return blocks_to_process, blocks_processed
+    
+    def get_reference_vector(self, corner_coords):
+        block_point = np.array(corner_coords) + self.grid_block_size//2
+        umbilicus_point = umbilicus_xy_at_z(self.umbilicus_points, block_point[2])
+        umbilicus_point = umbilicus_point[[0, 2, 1]] # ply to corner coords
+        umbilicus_normal = block_point - umbilicus_point
+        umbilicus_normal = umbilicus_normal[[2, 0, 1]] # corner coords to tif
+        unit_umbilicus_normal = umbilicus_normal / np.linalg.norm(umbilicus_normal)
+        return unit_umbilicus_normal
 
     def __len__(self):
         return len(self.blocks_to_process)
 
     def __getitem__(self, idx):
-        pass
+        corner_coords = self.blocks_to_process[idx]
+
+        reference_vector = self.get_reference_vector(corner_coords)
+        
+        # Convert NumPy arrays to PyTorch tensors
+        reference_vector_tensor = torch.from_numpy(reference_vector).float()
 
 def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
