@@ -4,12 +4,70 @@ import torch
 from torch.utils.data import Dataset
 
 import os
+import tifffile
 import multiprocessing
 import numpy as np
 import open3d as o3d
 from scipy.interpolate import interp1d
 
 CFG = {'num_threads': 4, 'GPUs': 1}
+
+def load_grid(path_template, cords, grid_block_size=500, cell_block_size=500, uint8=True):
+    """
+    path_template: Template for the path to load individual grid files
+    cords: Tuple (x, y, z) representing the corner coordinates of the grid block
+    grid_block_size: Size of the grid block
+    cell_block_size: Size of the individual grid files
+    """
+    # make grid_block_size an array with 3 elements
+    if isinstance(grid_block_size, int):
+        grid_block_size = np.array([grid_block_size, grid_block_size, grid_block_size])
+    
+    # Convert corner coordinates to file indices and generate the file path
+    # Starting indices
+    file_x_start, file_y_start, file_z_start = cords[0]//cell_block_size, cords[1]//cell_block_size, cords[2]//cell_block_size
+    # Ending indices
+    file_x_end, file_y_end, file_z_end = (cords[0] + grid_block_size[0])//cell_block_size, (cords[1] + grid_block_size[1])//cell_block_size, (cords[2] + grid_block_size[2])//cell_block_size
+
+    # Generate the grid block
+    if uint8:
+        grid_block = np.zeros((grid_block_size[2], grid_block_size[0], grid_block_size[1]), dtype=np.uint8)
+    else:
+        grid_block = np.zeros((grid_block_size[2], grid_block_size[0], grid_block_size[1]), dtype=np.uint16)
+
+    # Load the grid block from the individual grid files and place it in the larger grid block
+    for file_x in range(file_x_start, file_x_end + 1):
+        for file_y in range(file_y_start, file_y_end + 1):
+            for file_z in range(file_z_start, file_z_end + 1):
+                path = path_template.format(file_x, file_y, file_z)
+
+                # Check if the file exists
+                if not os.path.exists(path):
+                    # print(f"File {path} does not exist.")
+                    continue
+
+                # Read the image
+                with tifffile.TiffFile(path) as tif:
+                    images = tif.asarray()
+
+                if uint8:
+                    images = np.uint8(images//256)
+
+                # grid block slice position for the current file
+                x_start = max(file_x*cell_block_size, cords[0])
+                x_end = min((file_x + 1) * cell_block_size, cords[0] + grid_block_size[0])
+                y_start = max(file_y*cell_block_size, cords[1])
+                y_end = min((file_y + 1) * cell_block_size, cords[1] + grid_block_size[1])
+                z_start = max(file_z*cell_block_size, cords[2])
+                z_end = min((file_z + 1) * cell_block_size, cords[2] + grid_block_size[2])
+
+                # Place the current file in the grid block
+                try:
+                    grid_block[z_start - cords[2]:z_end - cords[2], x_start - cords[0]:x_end - cords[0], y_start - cords[1]:y_end - cords[1]] = images[z_start - file_z*cell_block_size: z_end - file_z*cell_block_size, x_start - file_x*cell_block_size: x_end - file_x*cell_block_size, y_start - file_y*cell_block_size: y_end - file_y*cell_block_size]
+                except:
+                    print(f"Error in grid block placement for grid block {cords} and file {file_x}, {file_y}, {file_z}")
+
+    return grid_block
 
 def grid_empty(path_template, cords, grid_block_size=500, cell_block_size=500):
     """
@@ -222,11 +280,18 @@ class GridDataset(Dataset):
 
     def __getitem__(self, idx):
         corner_coords = self.blocks_to_process[idx]
-
+        # load the grid block from corner_coords and grid size
+        padding = 50
+        corner_coords_padded = np.array(corner_coords) - padding
+        grid_block_size_padded = self.grid_block_size + 2 * padding
+        block = load_grid(self.path_template, corner_coords_padded, grid_block_size=grid_block_size_padded)
         reference_vector = self.get_reference_vector(corner_coords)
         
         # Convert NumPy arrays to PyTorch tensors
+        block_tensor = torch.from_numpy(block).float()  # Convert to float32 tensor
         reference_vector_tensor = torch.from_numpy(reference_vector).float()
+
+        return block_tensor, reference_vector_tensor, corner_coords, self.grid_block_size, padding
 
 def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)

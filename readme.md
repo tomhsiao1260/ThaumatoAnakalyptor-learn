@@ -16,7 +16,10 @@ Try to learn [ThaumatoAnakalyptor](https://github.com/schillij95/ThaumatoAnakaly
 
 ### grid_to_pointcloud.py
 
-umbilicus 為遵守 ply 格式所以座標系為 (y, z, x)，然後 corner_coords 為遵守 Grid Cells 格式所以座標系為 (y, x, z)，所以裡面有一些計算要注意這些座標系的差異，通常跟 point cloud 有關的都使用前者，跟 grid cells 有關的都使用後者。然後 tif stack 的座標系則是 (z, y, x)。
+umbilicus 為遵守 ply 格式所以座標系為 (y, z, x)，然後 corner_coords 為遵守 Grid Cells 格式所以座標系為 (y, x, z)，所以裡面有一些計算要注意這些座標系的差異，通常跟 point cloud 有關的都使用前者，跟 grid cells 有關的都使用後者。然後 tif stack 的座標系則是 (z, x, y)。
+
+cell block: 邊長為 500 的原始資料檔
+grid block: 邊長為 200 的計算用資料
 
 #### umbilicus
 
@@ -45,6 +48,10 @@ ply 的儲存，有 vertices, normals, colors 三種資料，前兩者為 (y, z,
 #### get_reference_vector
 
 粗略計算 normals。只要給一個正方體的角落點，就會根據正方體的中心點，和卷軸的中心點距離，推算出 normal 的方向 (z, y, x)。
+
+#### load_grid
+
+回傳一個 grid block 的 numpy，座標為 (z, x, y)。會跟據檔案裡不存在的部分會回傳 0，最大值為 1。
 
 #### GridDataset
 
