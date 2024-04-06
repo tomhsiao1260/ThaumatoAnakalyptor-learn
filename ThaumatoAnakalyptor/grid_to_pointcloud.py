@@ -146,7 +146,12 @@ class GridDataset(Dataset):
         computed_blocks = self.load_computed_blocks(pointcloud_base)
 
         # Initialize the blocks that need computing
-        self.blocks_to_compute(start_block, computed_blocks, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+        blocks_to_process, blocks_processed = self.blocks_to_compute(start_block, computed_blocks, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+        blocks_to_process = sorted(list(blocks_to_process)) # Sort the blocks to process for deterministic behavior
+
+        print('Need to Process:', blocks_to_process)
+        print('Length: ', len(blocks_to_process))
+        return blocks_to_process
 
     def load_computed_blocks(self, pointcloud_base):
         computed_blocks = set()
@@ -190,11 +195,24 @@ class GridDataset(Dataset):
                 # Otherwise add corner coords to the blocks that need processing
                 blocks_to_process.add(corner_coords)
 
-            print('Need to Process:', blocks_to_process)
-            print('Finished Process', blocks_processed)
+            # Compute neighboring blocks
+            for dx in [-grid_block_size, 0, grid_block_size]:
+                for dy in [-grid_block_size, 0, grid_block_size]:
+                    for dz in [-grid_block_size, 0, grid_block_size]:
+                        if dx == 0 and dy == 0 and dz == 0:
+                            continue
+                        if abs(dx) + abs(dy) + abs(dz) > grid_block_size:
+                            continue
+                        neighbor_coords = (corner_coords[0] + dx, corner_coords[1] + dy, corner_coords[2] + dz)
+
+                        # Add the neighbor to the list of blocks to process if it hasn't been processed yet
+                        if (neighbor_coords not in blocks_processed) and (neighbor_coords not in blocks_to_process) and (neighbor_coords not in all_corner_coords):
+                            all_corner_coords.add(neighbor_coords)
+
+        return blocks_to_process, blocks_processed
 
     def __len__(self):
-        pass
+        return len(self.blocks_to_process)
 
     def __getitem__(self, idx):
         pass
