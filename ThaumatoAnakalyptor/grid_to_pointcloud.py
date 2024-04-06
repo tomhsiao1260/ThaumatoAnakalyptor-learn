@@ -1,7 +1,7 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - Vesuvius Challenge 2023
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 import os
 import tifffile
@@ -293,8 +293,34 @@ class GridDataset(Dataset):
 
         return block_tensor, reference_vector_tensor, corner_coords, self.grid_block_size, padding
 
-def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
+# Custom collation function
+def custom_collate_fn(batches):
+    # Initialize containers for the aggregated items
+    blocks = []
+    reference_vectors = []
+    corner_coordss = []
+    grid_block_sizes = []
+    paddings = []
+
+    # Loop through each batch and aggregate its items
+    for batch in batches:
+        block, reference_vector, corner_coords, grid_block_size, padding = batch
+        blocks.append(block)
+        reference_vectors.append(reference_vector)
+        corner_coordss.append(corner_coords)
+        grid_block_sizes.append(grid_block_size)
+        paddings.append(padding)
+        
+    # Return a single batch containing all aggregated items
+    return blocks, reference_vectors, corner_coordss, grid_block_sizes, paddings
+
+def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1, batch_size=1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
+    num_threads = multiprocessing.cpu_count() // int(1.5 * int(CFG['GPUs']))
+    num_treads_for_gpus = 5
+    num_workers = min(num_threads, num_treads_for_gpus)
+    num_workers = max(num_workers, 1)
+    dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=custom_collate_fn, shuffle=False, num_workers=num_workers, prefetch_factor=3)
 
     return
 
@@ -321,10 +347,9 @@ def compute(base_path, volume_subpath, pointcloud_subpath, maximum_distance, rec
     umbilicus_points_old = None
 
     # Starting grid block at corner (3000, 4000, 2000) to match cell_yxz_006_008_004
-    # (2600, 2200, 5000)
     if not skip_surface_blocks:
         # compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
-        grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
+        grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance, batch_size=1*int(CFG['GPUs']))
     else:
         print("Skipping surface block computation.")
 
