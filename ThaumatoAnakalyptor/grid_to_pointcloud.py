@@ -69,10 +69,42 @@ def umbilicus(points_array):
     return np.column_stack((y_new, z_new, x_new))
 
 class GridDataset(Dataset):
-    def __init__(self, path_template, umbilicus_points, grid_block_size=200):
+    def __init__(self, pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
         self.grid_block_size = grid_block_size
         self.path_template = path_template
         self.umbilicus_points = umbilicus_points
+        self.blocks_to_process = self.init_blocks_to_process(pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+
+    def init_blocks_to_process(self, pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance):
+        # Load the set of computed blocks
+        computed_blocks = self.load_computed_blocks(pointcloud_base)
+
+        # Initialize the blocks that need computing
+        self.blocks_to_compute(start_block, computed_blocks, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
+
+    def load_computed_blocks(self, pointcloud_base):
+        computed_blocks = set()
+        # Try to load the list of computed blocks
+        try:
+            with open(os.path.join("/", pointcloud_base, "computed_blocks.txt"), "r") as f:
+                # load saved tuples with 3 elements
+                computed_blocks = set([eval(line.strip()) for line in f])
+        except FileNotFoundError:
+            print("[INFO]: No computed blocks found.")
+        except Exception as e:
+            print(f"Error loading computed blocks: {e}")
+        return computed_blocks
+    
+    def blocks_to_compute(self, start_coord, computed_blocks, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance):
+        print('start_coord: ', start_coord)
+        print('computed_blocks: ', computed_blocks)
+        print('umbilicus_points.shape: ', umbilicus_points.shape)
+        print('umbilicus_points_old: ', umbilicus_points_old)
+        print('path_template: ', path_template)
+        print('grid_block_size: ', grid_block_size)
+        print('recompute: ', recompute)
+        print('fix_umbilicus: ', fix_umbilicus)
+        print('maximum_distance: ', maximum_distance)
 
     def __len__(self):
         pass
@@ -80,15 +112,16 @@ class GridDataset(Dataset):
     def __getitem__(self, idx):
         pass
 
-def grid_inference(path_template, umbilicus_points, grid_block_size=200):
-    dataset = GridDataset(path_template, umbilicus_points, grid_block_size=grid_block_size)
+def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
+    dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
 
     return
 
-def compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus, skip_surface_blocks):
+def compute(base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus, skip_surface_blocks):
     CFG['num_threads'] = num_threads
     CFG['GPUs'] = gpus
-
+    
+    pointcloud_base = os.path.dirname(pointcloud_subpath)
     umbilicus_path = '../umbilicus.txt'
     save_umbilicus_path = umbilicus_path.replace(".txt", ".ply")
 
@@ -104,15 +137,22 @@ def compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus, sk
     # Save umbilicus as a PLY file, for visualization (CloudCompare)
     save_surface_ply(umbilicus_points, np.zeros_like(umbilicus_points), save_umbilicus_path, color=colors)
 
+    umbilicus_points_old = None
+
     # Starting grid block at corner (3000, 4000, 2000) to match cell_yxz_006_008_004
     # (2600, 2200, 5000)
     if not skip_surface_blocks:
         # compute_surface_for_block_multiprocessing(start_block, pointcloud_base, path_template, save_template_v, save_template_r, umbilicus_points, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, umbilicus_points_old=umbilicus_points_old, maximum_distance=maximum_distance)
-        grid_inference(path_template, umbilicus_points, grid_block_size=200)
+        grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
     else:
         print("Skipping surface block computation.")
 
 def main():
+    maximum_distance= -1 #1750 # maximum distance between blocks to compute and the umbilicus (speed up pointcloud generation if only interested in inner part of scrolls)
+    recompute=False # whether to completely recompute all already processed blocks or continue (recompute=False). 
+    fix_umbilicus = False
+    start_block = (3000, 4000, 2000) # scroll1
+
     base_path = ""
     volume_subpath = "../2dtifs_8um_grids"
     pointcloud_subpath = "../point_cloud"
@@ -120,7 +160,7 @@ def main():
     gpus = CFG['GPUs']
     skip_surface_blocks = False
 
-    compute(base_path, volume_subpath, pointcloud_subpath, num_threads, gpus, skip_surface_blocks)
+    compute(base_path, volume_subpath, pointcloud_subpath, maximum_distance, recompute, fix_umbilicus, start_block, num_threads, gpus, skip_surface_blocks)
 
 if __name__ == "__main__":
     main()
