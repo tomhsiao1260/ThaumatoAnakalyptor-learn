@@ -208,7 +208,15 @@ class MyPredictionWriter(BasePredictionWriter):
         print("On predict")
 
     def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int) -> None:
-        print("Batch end")
+        if prediction is None:
+            # print("Prediction is None")
+            return
+        # print(f"On batch end, len: {len(prediction)}")
+        if len(prediction) == 0:
+            # print("Prediction is empty")
+            return
+        
+        print('batch predition: ', prediction)
 
 class GridDataset(Dataset):
     def __init__(self, pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1):
@@ -346,6 +354,8 @@ class PointCloudModel(pl.LightningModule):
         # Extract input information
         grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings = x
 
+        return 'some forward result here'
+
 def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1, batch_size=1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)
     num_threads = multiprocessing.cpu_count() // int(1.5 * int(CFG['GPUs']))
@@ -358,6 +368,11 @@ def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points
     writer = dataset.get_writer()
     trainer = pl.Trainer(callbacks=[writer], strategy="ddp")
     # trainer = pl.Trainer(callbacks=[writer], gpus=int(CFG['GPUs']), strategy="ddp")
+
+    print("Start prediction")
+    # Run prediction
+    trainer.predict(model, dataloaders=dataloader, return_predictions=False)
+    print("Prediction done")
 
     return
 
