@@ -1,7 +1,10 @@
 *.DS_Store
+*.tif
 
 env/
 __pycache__/
+lightning_logs/
+
 2dtifs_8um/
 2dtifs_8um_grids/
 point_cloud/

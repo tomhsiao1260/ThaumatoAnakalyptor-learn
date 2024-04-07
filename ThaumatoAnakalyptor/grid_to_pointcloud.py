@@ -429,12 +429,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # path_template = os.path.join('../2dtifs_8um_grids', "cell_yxz_{:03}_{:03}_{:03}.tif")
-
-    # grid_block = load_grid(path_template, (3000, 4000, 2000), 200)
-    # grid_block = torch.from_numpy(grid_block).float() 
-    # grid_block = np.uint8(grid_block.numpy())
-    # print(np.max(grid_block))
-
-    # tifffile.imwrite('output.tif', grid_block) 
