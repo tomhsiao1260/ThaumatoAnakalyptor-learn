@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import BasePredictionWriter
+from surface_detection import surface_detection
 
 import os
 import tifffile
@@ -216,8 +217,9 @@ class MyPredictionWriter(BasePredictionWriter):
             # print("Prediction is empty")
             return
         
-        grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings = prediction
-        grid_volumes = grid_volumes[0]
+        (points_r_tensors, normals_r_tensors) = prediction
+
+        grid_volumes = points_r_tensors[0]
         grid_volumes = grid_volumes.numpy()
         grid_volumes = np.uint8(grid_volumes)
 
@@ -361,7 +363,15 @@ class PointCloudModel(pl.LightningModule):
         # Extract input information
         grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings = x
 
-        return grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings
+        points_r_tensors, normals_r_tensors, points_v_tensors, normals_v_tensors = [], [], [], []
+        for grid_volume, reference_vector, corner_coords, grid_block_size, padding in zip(grid_volumes, reference_vectors, corner_coordss, grid_block_sizes, paddings):
+            tensor_tuple = surface_detection(grid_volume, reference_vector, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
+            points_r_tensor, normals_r_tensor = tensor_tuple
+
+            points_r_tensors.append(points_r_tensor)
+            normals_r_tensors.append(normals_r_tensor)
+
+        return (points_r_tensors, normals_r_tensors)
 
 def grid_inference(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=200, recompute=False, fix_umbilicus=False, maximum_distance=-1, batch_size=1):
     dataset = GridDataset(pointcloud_base, start_block, path_template, umbilicus_points, umbilicus_points_old, grid_block_size=grid_block_size, recompute=recompute, fix_umbilicus=fix_umbilicus, maximum_distance=maximum_distance)

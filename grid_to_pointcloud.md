@@ -10,7 +10,7 @@
 
 #### PointCloudModel
 
-然後我們透過 torch lighting 定義一個 model，這個模型不是用來訓練，而是利用一系列的張量運算來 inference 一些結果。實作方法寫在 forward 內，輸入 x 會是從 dataset 那裡的 `__getitem` 方法取來的資料，輸出就是 inference 後的結果。
+然後我們透過 torch lighting 定義一個 model，這個模型不是用來訓練，而是利用一系列的張量運算來 inference 一些結果。實作方法寫在 forward 內，輸入 x 會是從 dataset 那裡的 `__getitem__` 方法取來的資料，輸出就是 inference 後的結果。更具體來說，這裡面的核心計算寫在 surface_detection.py 裡，做了一系列的處理把 point clouds 提取出來。
 
 #### MyPredictionWriter
 
@@ -20,9 +20,9 @@
 
 現在我們就可以定義一個 torch lighting 的 Trainer，以前面提到的 writer 進行初始化。然後把對應的 model, dataloader 丟進 trainer.predict 方法執行運算。
 
----
+## Other details
 
-#### GridDataset details
+#### GridDataset
 
 資料集的準備有不少細節，首先是資料集是透過一系列的大小為 200 的正方體緊密連接來定義的，你需要先給個起始點，然後會有個遞迴方法從這個點蔓延開來，去尋找整塊連續有下載下來的 grid cells 作為資料集。
 
