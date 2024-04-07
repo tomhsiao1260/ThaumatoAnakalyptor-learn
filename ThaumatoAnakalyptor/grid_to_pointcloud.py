@@ -232,7 +232,7 @@ class GridDataset(Dataset):
         self.path_template = path_template
         self.umbilicus_points = umbilicus_points
         self.blocks_to_process = self.init_blocks_to_process(pointcloud_base, start_block, umbilicus_points, umbilicus_points_old, path_template, grid_block_size, recompute, fix_umbilicus, maximum_distance)
-        self.blocks_to_process = self.blocks_to_process[30:31]
+        self.blocks_to_process = self.blocks_to_process[21:22]
 
         self.writer = MyPredictionWriter(grid_block_size=grid_block_size)
 
