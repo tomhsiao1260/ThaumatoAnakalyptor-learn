@@ -1,5 +1,6 @@
 *.DS_Store
 *.tif
+*.pt
 
 env/
 __pycache__/
@@ -7,6 +8,7 @@ lightning_logs/
 
 2dtifs_8um/
 2dtifs_8um_grids/
+output/
 point_cloud/
 umbilicus.txt
 umbilicus.ply
