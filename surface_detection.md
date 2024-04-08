@@ -8,4 +8,20 @@
 
 #### sobel_filter_3d
 
-做邊緣偵測相關運算，會回傳一個 (300, 300, 300, 3) 的 tensor，是透過三層 3D convolution 產生的，用的是 sobel 的 kernal 作邊緣檢測，產生的結果會採樣為 (30, 30, 30, 3) 的大小。
+做邊緣偵測相關運算，會回傳一個 (300, 300, 300, 3) 的 tensor，是透過三層 3D convolution 產生的，用的是 sobel 的 kernal 作邊緣檢測。
+
+#### adjusted_vectors_interp
+
+法向量資訊存在 adjusted_vectors_interp，大小為 (300, 300, 300, 3)。計算過程會先把 sobel 的結果採樣為 (30, 30, 30, 3) 的大小，然後透過 vector_convolution 推算出法向量，再透過 adjust_vectors_to_global_direction 的修正，把這些向量對齊到與卷軸中心發出來的向量方向相近。最後再把這些 (30, 30, 30, 3) 的向量透過 interpolate_to_original 內插，擴充回原來的大小 (300, 300, 300, 3)。
+
+#### first_derivative
+
+把 sobel 張量投影到 adjusted_vectors_interp 上，並記錄長度，存為 (300, 300, 300) 的張量，且數值被歸一到介於 -1 ~ 1 之間。也就是只保留在法向量方向上的 sobel 數值，即垂直於紙片方向的強度變化，會在邊緣處有顯著亮點。
+
+#### second_derivative
+
+同樣邏輯，把 first_derivative 拿去算 sobel，然後再投影到 adjusted_vectors_interp 上，並記錄長度，存為 (300, 300, 300) 的張量，且數值被歸一到介於 -1 ~ 1 之間。也就是只保留在法向量方向上的 sobel 數值，即垂直於紙片方向強度變化的變化率，會在 first_derivative 圖案上的邊緣處有顯著的亮點。
+
+#### recto & verso
+
+有了沿著法向量一次和二次微分的張量，就可以根據不同條件式萃取出紙張的正面 recto 和背面 verso。首先，一次微分很正的大致就是 recto，很負的大致就是 verso，然後這兩個區域再透過二次微分的強度不要太大的條件來提取出更窄的區間。

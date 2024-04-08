@@ -329,16 +329,16 @@ def torch_to_tif(tensor, path):
     tifffile.imwrite(path, volume)
 
 if __name__ == '__main__':
-    path = '../2dtifs_8um_grids/cell_yxz_006_008_004.tif'
+    # path = '../2dtifs_8um_grids/cell_yxz_006_008_004.tif'
 
-    volume = tifffile.imread(path)
-    volume = volume[:300, :300, :300]
-    volume = np.uint8(volume//256)
-    volume = torch.from_numpy(volume).float()  # Convert to float32 tensor
+    # volume = tifffile.imread(path)
+    # volume = volume[:300, :300, :300]
+    # volume = np.uint8(volume//256)
+    # volume = torch.from_numpy(volume).float()  # Convert to float32 tensor
 
-    normal = np.array([0, 1, 0]) # z, y, x
-    tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
-    points_r_tensor, normals_r_tensor = tensor_tuple
+    # normal = np.array([0, 1, 0]) # z, y, x
+    # tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
+    # points_r_tensor, normals_r_tensor = tensor_tuple
 
     # tensor = torch.load('../output/blur.pt')
     # torch_to_tif(tensor, '../output/blur.tif')
@@ -364,11 +364,19 @@ if __name__ == '__main__':
     # tensor = torch.load('../output/second_derivative.pt') * 255
     # torch_to_tif(tensor, '../output/second_derivative.tif')
 
-    tensor = torch.load('../output/mask_recto.pt')
-    tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
-    torch_to_tif(tensor, '../output/mask_recto.tif')
+    # tensor = torch.load('../output/mask_recto.pt')
+    # tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
+    # torch_to_tif(tensor, '../output/mask_recto.tif')
 
-    tensor = torch.load('../output/mask_verso.pt')
-    tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
-    torch_to_tif(tensor, '../output/mask_verso.tif')
+    # tensor = torch.load('../output/mask_verso.pt')
+    # tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
+    # torch_to_tif(tensor, '../output/mask_verso.tif')
+
+    origin = tifffile.imread('../output/origin.tif')
+    recto = tifffile.imread('../output/mask_recto.tif')
+    verso = tifffile.imread('../output/mask_verso.tif')
+    mix = np.stack([origin] * 3, axis=-1)
+    mix[recto > 100, 0] = 255
+    mix[verso > 100, 1] = 255
+    tifffile.imwrite('../output/mix.tif', mix)
     
