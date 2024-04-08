@@ -240,6 +240,7 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     vector_conv = torch.load('../output/vector_conv.pt')
     adjusted_vectors_interp = torch.load('../output/adjusted_vectors_interp.pt')
     first_derivative = torch.load('../output/first_derivative.pt')
+    second_derivative = torch.load('../output/second_derivative.pt')
 
     # # using half percision to save memory
     # volume = volume
@@ -276,11 +277,28 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # first_derivative = scale_to_0_1(first_derivative)
     # torch.save(first_derivative, '../output/first_derivative.pt')
 
-    # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
-    sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
-    second_derivative = adjusted_norm(sobel_vectors_derivative, adjusted_vectors_interp)
-    second_derivative = scale_to_0_1(second_derivative)
-    torch.save(second_derivative, '../output/second_derivative.pt')
+    # # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
+    # sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
+    # second_derivative = adjusted_norm(sobel_vectors_derivative, adjusted_vectors_interp)
+    # second_derivative = scale_to_0_1(second_derivative)
+    # torch.save(second_derivative, '../output/second_derivative.pt')
+
+    # Generate recto side of sheet
+
+    # Create a mask for the conditions on the first and second derivatives
+    mask_recto = (second_derivative.abs() < threshold_der2) & (first_derivative > threshold_der)
+    torch.save(mask_recto, '../output/mask_recto.pt')
+    # Check where the second derivative is zero and the first derivative is above a threshold
+    points_to_mark = torch.where(mask_recto)
+
+    # Subsample the points to mark
+    #subsample_nr = 2000000
+    coords = torch.stack(points_to_mark, dim=1)
+    #coords = subsample_uniform(coords, subsample_nr)
+    
+    # Cluster the surface points
+    coords_normals = adjusted_vectors_interp[coords[:, 0], coords[:, 1], coords[:, 2]]
+    coords_normals = coords_normals / torch.norm(coords_normals, dim=1, keepdim=True)
 
     return (volume, global_reference_vector)
 
@@ -323,6 +341,10 @@ if __name__ == '__main__':
     # tensor = torch.load('../output/first_derivative.pt') * 255
     # torch_to_tif(tensor, '../output/first_derivative.tif')
 
-    tensor = torch.load('../output/second_derivative.pt') * 255
-    torch_to_tif(tensor, '../output/second_derivative.tif')
+    # tensor = torch.load('../output/second_derivative.pt') * 255
+    # torch_to_tif(tensor, '../output/second_derivative.tif')
+
+    tensor = torch.load('../output/mask_recto.pt')
+    tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
+    torch_to_tif(tensor, '../output/mask_recto.tif')
     
