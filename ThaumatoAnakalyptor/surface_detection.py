@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 import tifffile
 import numpy as np
@@ -160,30 +161,76 @@ def vector_convolution(input_tensor, window_size=20, stride=20, device=None):
 
     return output_tensor
 
+# Function that interpolates the output tensor to the original size of the input tensor
+def interpolate_to_original(input_tensor, output_tensor):
+    # Adjust the shape of the output tensor to match the input tensor
+    # by applying 3D interpolation. We're assuming that the last dimension
+    # of both tensors is the channel dimension (which should not be interpolated over).
+    output_tensor = output_tensor.permute(3, 0, 1, 2)
+    input_tensor = input_tensor.permute(3, 0, 1, 2)
+
+    # Use 3D interpolation to resize output_tensor to match the shape of input_tensor.
+    interpolated_tensor = F.interpolate(output_tensor.unsqueeze(0), size=input_tensor.shape[1:], mode='trilinear', align_corners=False)
+
+    # Return the tensor to its original shape.
+    interpolated_tensor = interpolated_tensor.squeeze(0).permute(1, 2, 3, 0)
+
+    return interpolated_tensor
+
+# Function that adjusts the vectors in the input tensor to point in the same general direction as the global reference vector.
+def adjust_vectors_to_global_direction(input_tensor, global_reference_vector):
+    # Compute dot product of each vector in the input tensor with the global reference vector.
+    # The resulting tensor will have the same shape as the input tensor, but with the last dimension squeezed out.
+    dot_products = (input_tensor * global_reference_vector).sum(dim=-1, keepdim=True)
+    # Create a mask of the same shape as the dot products tensor, 
+    # with True wherever the dot product is negative.
+    mask = dot_products < 0
+    
+    # Expand the mask to have the same shape as the input tensor
+    mask = mask.expand(input_tensor.shape)
+
+    # Negate all vectors in the input tensor where the mask is True.
+    adjusted_tensor = input_tensor.clone()
+    adjusted_tensor[mask] = -input_tensor[mask]
+
+    return adjusted_tensor
+
 # Function to detect surface points in a 3D volume
 def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks=4, sobel_overlap=3, window_size=20, stride=20, threshold_der=0.1, threshold_der2=0.001, convert_to_numpy=True):
     # device
     device = volume.device
 
-    # using half percision to save memory
-    volume = volume
-    # Blur the volume
-    blur = uniform_blur3d(channels=1, size=blur_size, device=device)
-    blurred_volume = blur(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-    torch.save(blurred_volume, '../output/blur.pt')
+    # sobel_vectors_subsampled = torch.load('../output/sobel_sampled.pt')
+    sobel_vectors = torch.load('../output/sobel.pt')
+    vector_conv = torch.load('../output/vector_conv.pt')
 
-    # Apply Sobel filter to the blurred volume
-    sobel_vectors = sobel_filter_3d(volume, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
-    torch.save(sobel_vectors, '../output/sobel.pt')
+    # # using half percision to save memory
+    # volume = volume
+    # # Blur the volume
+    # blur = uniform_blur3d(channels=1, size=blur_size, device=device)
+    # blurred_volume = blur(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
+    # torch.save(blurred_volume, '../output/blur.pt')
 
-    # Subsample the sobel_vectors
-    sobel_stride = 10
-    sobel_vectors_subsampled = sobel_vectors[::sobel_stride, ::sobel_stride, ::sobel_stride, :]
-    torch.save(sobel_vectors_subsampled, '../output/sobel_sampled.pt')
+    # # Apply Sobel filter to the blurred volume
+    # sobel_vectors = sobel_filter_3d(volume, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
+    # torch.save(sobel_vectors, '../output/sobel.pt')
 
-    # Apply vector convolution to the Sobel vectors
-    vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device)
-    torch.save(vector_conv, '../output/vector_conv.pt')
+    # # Subsample the sobel_vectors
+    # sobel_stride = 10
+    # sobel_vectors_subsampled = sobel_vectors[::sobel_stride, ::sobel_stride, ::sobel_stride, :]
+    # torch.save(sobel_vectors_subsampled, '../output/sobel_sampled.pt')
+
+    # # Apply vector convolution to the Sobel vectors
+    # vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device)
+    # torch.save(vector_conv, '../output/vector_conv.pt')
+
+    # Adjust vectors to the global direction
+    adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector)
+    torch.save(adjusted_vectors, '../output/adjusted_vectors.pt')
+
+    # Interpolate the adjusted vectors to the original size
+    adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
+    torch.save(adjusted_vectors_interp, '../output/adjusted_vectors_interp.pt')
 
     return (volume, global_reference_vector)
 
@@ -216,4 +263,10 @@ if __name__ == '__main__':
 
     # tensor = torch.load('../output/vector_conv.pt') * 255
     # torch_to_tif(tensor, '../output/vector_conv.tif')
+
+    tensor = torch.load('../output/adjusted_vectors.pt') * 255
+    torch_to_tif(tensor, '../output/adjusted_vectors.tif')
+
+    tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
+    torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
     
