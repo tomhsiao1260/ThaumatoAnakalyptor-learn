@@ -300,7 +300,27 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     coords_normals = adjusted_vectors_interp[coords[:, 0], coords[:, 1], coords[:, 2]]
     coords_normals = coords_normals / torch.norm(coords_normals, dim=1, keepdim=True)
 
-    return (volume, global_reference_vector)
+    # Generate verso side of sheet
+    # Create a mask for the conditions on the first and second derivatives
+    mask_verso = (second_derivative.abs() < threshold_der2) & (first_derivative < -threshold_der)
+    torch.save(mask_verso, '../output/mask_verso.pt')
+    # Check where the second derivative is zero and the first derivative is above a threshold
+    points_to_mark_verso = torch.where(mask_verso)
+
+    coords_verso = torch.stack(points_to_mark_verso, dim=1)
+    
+    # Cluster the surface points
+    coords_normals_verso = adjusted_vectors_interp[coords_verso[:, 0], coords_verso[:, 1], coords_verso[:, 2]]
+    coords_normals_verso = coords_normals_verso / torch.norm(coords_normals_verso, dim=1, keepdim=True)
+
+    if convert_to_numpy:
+        coords = coords.cpu().numpy()
+        coords_normals = coords_normals.cpu().numpy()
+        
+        coords_verso = coords_verso.cpu().numpy()
+        coords_normals_verso = coords_normals_verso.cpu().numpy()
+
+    return (coords, coords_normals), (coords_verso, coords_normals_verso)
 
 def torch_to_tif(tensor, path):
     volume = tensor.numpy()
@@ -347,4 +367,8 @@ if __name__ == '__main__':
     tensor = torch.load('../output/mask_recto.pt')
     tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
     torch_to_tif(tensor, '../output/mask_recto.tif')
+
+    tensor = torch.load('../output/mask_verso.pt')
+    tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
+    torch_to_tif(tensor, '../output/mask_verso.tif')
     
