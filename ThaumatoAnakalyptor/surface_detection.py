@@ -131,6 +131,40 @@ def find_mean_indiscriminative_vector(vectors, n, device):
 
     return best_vector
 
+# Function that  projects vector a onto vector b
+def vector_projection(a, b):
+    return (a * b).sum(-1, keepdim=True) * b / b.norm(dim=-1, keepdim=True)**2
+
+# Function that adjusts the norm of vector a to the norm of vector b based on their direction
+def adjusted_norm(a, b):
+    # Calculate the projection
+    projection = vector_projection(a, b)
+    
+    # Compute the dot product of the projected vector and the original vector b
+    dot_product = (projection * b).sum(-1, keepdim=True)
+    
+    # Compute the norm of the projection
+    projection_norm = projection.norm(dim=-1)
+    
+    # Adjust the norm based on the sign of the dot product
+    adjusted_norm = torch.sign(dot_product.squeeze()) * projection_norm
+    
+    return adjusted_norm
+
+def scale_to_0_1(tensor):
+    # Compute the 99th percentile
+    #quantile_val = torch.quantile(tensor, 0.95)
+    
+    # Clip the tensor values at the 99th percentile
+    clipped_tensor = torch.clamp(tensor, min=-1000, max=1000)
+    
+    # Scale the tensor to the range [0,1]
+    tensor_min = torch.min(clipped_tensor)
+    tensor_max = torch.max(clipped_tensor)
+    tensor_scale = torch.max(torch.abs(tensor_min), torch.abs(tensor_max))
+    scaled_tensor = clipped_tensor / tensor_scale
+    return scaled_tensor
+
 # Function that convolutes a 3D Volume of vectors to find their mean indiscriminative vector
 def vector_convolution(input_tensor, window_size=20, stride=20, device=None):
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -200,9 +234,11 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # device
     device = volume.device
 
-    # sobel_vectors_subsampled = torch.load('../output/sobel_sampled.pt')
+    sobel_vectors = torch.load('../output/sobel.pt')
+    sobel_vectors_subsampled = torch.load('../output/sobel_sampled.pt')
     sobel_vectors = torch.load('../output/sobel.pt')
     vector_conv = torch.load('../output/vector_conv.pt')
+    adjusted_vectors_interp = torch.load('../output/adjusted_vectors_interp.pt')
 
     # # using half percision to save memory
     # volume = volume
@@ -224,13 +260,20 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device)
     # torch.save(vector_conv, '../output/vector_conv.pt')
 
-    # Adjust vectors to the global direction
-    adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector)
-    torch.save(adjusted_vectors, '../output/adjusted_vectors.pt')
+    # # Adjust vectors to the global direction
+    # adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector)
+    # torch.save(adjusted_vectors, '../output/adjusted_vectors.pt')
 
-    # Interpolate the adjusted vectors to the original size
-    adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
-    torch.save(adjusted_vectors_interp, '../output/adjusted_vectors_interp.pt')
+    # # Interpolate the adjusted vectors to the original size
+    # adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
+    # torch.save(adjusted_vectors_interp, '../output/adjusted_vectors_interp.pt')
+
+    # Project the Sobel result onto the adjusted vectors and calculate the norm
+    first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
+    fshape = first_derivative.shape
+    
+    first_derivative = scale_to_0_1(first_derivative)
+    torch.save(first_derivative, '../output/first_derivative.pt')
 
     return (volume, global_reference_vector)
 
@@ -264,9 +307,12 @@ if __name__ == '__main__':
     # tensor = torch.load('../output/vector_conv.pt') * 255
     # torch_to_tif(tensor, '../output/vector_conv.tif')
 
-    tensor = torch.load('../output/adjusted_vectors.pt') * 255
-    torch_to_tif(tensor, '../output/adjusted_vectors.tif')
+    # tensor = torch.load('../output/adjusted_vectors.pt') * 255
+    # torch_to_tif(tensor, '../output/adjusted_vectors.tif')
 
-    tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
-    torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
+    # tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
+    # torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
+
+    tensor = torch.load('../output/first_derivative.pt') * 255
+    torch_to_tif(tensor, '../output/first_derivative.tif')
     
