@@ -239,6 +239,7 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     sobel_vectors = torch.load('../output/sobel.pt')
     vector_conv = torch.load('../output/vector_conv.pt')
     adjusted_vectors_interp = torch.load('../output/adjusted_vectors_interp.pt')
+    first_derivative = torch.load('../output/first_derivative.pt')
 
     # # using half percision to save memory
     # volume = volume
@@ -268,12 +269,18 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
     # torch.save(adjusted_vectors_interp, '../output/adjusted_vectors_interp.pt')
 
-    # Project the Sobel result onto the adjusted vectors and calculate the norm
-    first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
-    fshape = first_derivative.shape
+    # # Project the Sobel result onto the adjusted vectors and calculate the norm
+    # first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
+    # fshape = first_derivative.shape
     
-    first_derivative = scale_to_0_1(first_derivative)
-    torch.save(first_derivative, '../output/first_derivative.pt')
+    # first_derivative = scale_to_0_1(first_derivative)
+    # torch.save(first_derivative, '../output/first_derivative.pt')
+
+    # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
+    sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
+    second_derivative = adjusted_norm(sobel_vectors_derivative, adjusted_vectors_interp)
+    second_derivative = scale_to_0_1(second_derivative)
+    torch.save(second_derivative, '../output/second_derivative.pt')
 
     return (volume, global_reference_vector)
 
@@ -313,6 +320,9 @@ if __name__ == '__main__':
     # tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
     # torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
 
-    tensor = torch.load('../output/first_derivative.pt') * 255
-    torch_to_tif(tensor, '../output/first_derivative.tif')
+    # tensor = torch.load('../output/first_derivative.pt') * 255
+    # torch_to_tif(tensor, '../output/first_derivative.tif')
+
+    tensor = torch.load('../output/second_derivative.pt') * 255
+    torch_to_tif(tensor, '../output/second_derivative.tif')
     
