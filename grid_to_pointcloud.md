@@ -34,7 +34,7 @@
 
 3. neighbor_coords：如果都沒被上面兩種機制篩選掉的話，會再從這個正方體的周圍再挑出 8 個正方體重複上面的事。
 
-umbilicus 為遵守 ply 格式所以座標系為 (y, z, x)，然後 corner_coords 為遵守 Grid Cells 格式所以座標系為 (y, x, z)，所以裡面有一些計算要注意這些座標系的差異，通常跟 point cloud 有關的都使用前者，跟 grid cells 有關的都使用後者。然後 tif stack 的座標系則是 (z, x, y)。
+umbilicus 為遵守 ply 格式所以座標系為 (y, z, x)，然後 corner_coords 為遵守 Grid Cells 格式所以座標系為 (y, x, z)，所以裡面有一些計算要注意這些座標系的差異，通常跟 point cloud 有關的都使用前者，跟 grid cells 有關的都使用後者。然後 tif stack 的座標系則是 (z, y, x)。
 
 cell block: 邊長為 500 的原始資料檔
 grid block: 邊長為 200 的計算用資料
