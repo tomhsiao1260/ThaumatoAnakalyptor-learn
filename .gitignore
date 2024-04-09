@@ -1,6 +1,7 @@
 *.DS_Store
 *.tif
 *.pt
+*.ply
 
 env/
 __pycache__/

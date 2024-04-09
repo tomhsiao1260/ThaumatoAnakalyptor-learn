@@ -25,3 +25,7 @@
 #### recto & verso
 
 有了沿著法向量一次和二次微分的張量，就可以根據不同條件式萃取出紙張的正面 recto 和背面 verso。首先，一次微分很正的大致就是 recto，很負的大致就是 verso，然後這兩個區域再透過二次微分的強度不要太大的條件來提取出更窄的區間。
+
+#### save_ply
+
+有了 recto 和 verso，就能提取出這兩個面對應的 points 和 normals。然後再透過 extract_size_tensor 方法萃取出在 padding 前的點有那些，以及透過 corner_coords 資訊將這些點的原始位置還原，並存成 ply。其中 recto 會被放在 point_cloud_recto 資料夾，verso 會被放在 point_cloud_verso 資料夾，檔案會命名為 cell_yxz_A_B_C.ply 的形式，其中 A, B, C 是以 grid_block_size 的跨步 200 下去計算的。

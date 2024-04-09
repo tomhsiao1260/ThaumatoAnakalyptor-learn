@@ -66,3 +66,7 @@ ply 的儲存，有 vertices, normals, colors 三種資料，前兩者為 (y, z,
 #### load_grid
 
 回傳一個 grid block 的 numpy，座標為 (z, x, y)。會跟據檔案裡不存在的部分會回傳 0，最大值為 1。
+
+#### extract_size_tensor
+
+會提取出 padding 前的 points 和對應的 normals。輸入是有 padding 後找到的 points, normals，後兩項則是想要提取的範圍邊界值，也就是 padding 到 grid_block_size + padding。

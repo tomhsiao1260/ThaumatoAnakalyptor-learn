@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import os
 import tifffile
 import numpy as np
+import open3d as o3d
 
 ## sobel_filter_3d from https://github.com/lukeboi/scroll-viewer/blob/dev/server/app.py
 ### adjusted for my use case and improve efficiency
@@ -229,18 +231,78 @@ def adjust_vectors_to_global_direction(input_tensor, global_reference_vector):
 
     return adjusted_tensor
 
+def extract_size_tensor(points, normals, grid_block_position_min, grid_block_position_max):
+    """
+    Extract points and corresponding normals that lie within the given size range.
+
+    Parameters:
+        points (torch.Tensor): The point coordinates, shape (n, 3).
+        normals (torch.Tensor): The point normals, shape (n, 3).
+        grid_block_position_min (int): The minimum block size.
+        grid_block_position_max (int): The maximum block size.
+
+    Returns:
+        filtered_points (torch.Tensor): The filtered points, shape (m, 3).
+        filtered_normals (torch.Tensor): The corresponding filtered normals, shape (m, 3).
+    """
+
+    # Convert min and max to tensors for comparison
+    min_tensor = torch.tensor([grid_block_position_min] * 3, dtype=points.dtype, device=points.device)
+    max_tensor = torch.tensor([grid_block_position_max] * 3, dtype=points.dtype, device=points.device)
+
+    # Create a mask to filter points within the specified range
+    mask_min = torch.all(points >= min_tensor, dim=-1)
+    mask_max = torch.all(points <= max_tensor, dim=-1)
+
+    # Combine the masks to get the final mask
+    mask = torch.logical_and(mask_min, mask_max)
+
+    # Apply the mask to filter points and corresponding normals
+    filtered_points = points[mask]
+    filtered_normals = normals[mask]
+
+    # Reposition the points to be relative to the grid block
+    filtered_points -= min_tensor
+
+    return filtered_points, filtered_normals
+
+def save_surface_ply(surface_points, normals, filename, color=None):
+    try:
+        if (len(surface_points)  < 1):
+            return
+        # Create an Open3D point cloud object and populate it
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(surface_points.astype(np.float32))
+        pcd.normals = o3d.utility.Vector3dVector(normals.astype(np.float16))
+        if color is not None:
+            pcd.colors = o3d.utility.Vector3dVector(color.astype(np.float16))
+
+        # Create folder if it doesn't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        # Save to a temporary file first to ensure data integrity
+        temp_filename = filename.replace(".ply", "_temp.ply")
+        o3d.io.write_point_cloud(temp_filename, pcd)
+
+        # Rename the temp file to the original filename
+        os.rename(temp_filename, filename)
+    except Exception as e:
+        print(f"Error saving surface PLY: {e}")
+
 # Function to detect surface points in a 3D volume
 def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks=4, sobel_overlap=3, window_size=20, stride=20, threshold_der=0.1, threshold_der2=0.001, convert_to_numpy=True):
     # device
     device = volume.device
 
-    sobel_vectors = torch.load('../output/sobel.pt')
-    sobel_vectors_subsampled = torch.load('../output/sobel_sampled.pt')
-    sobel_vectors = torch.load('../output/sobel.pt')
-    vector_conv = torch.load('../output/vector_conv.pt')
+    # sobel_vectors = torch.load('../output/sobel.pt')
+    # sobel_vectors_subsampled = torch.load('../output/sobel_sampled.pt')
+    # sobel_vectors = torch.load('../output/sobel.pt')
+    # vector_conv = torch.load('../output/vector_conv.pt')
     adjusted_vectors_interp = torch.load('../output/adjusted_vectors_interp.pt')
     first_derivative = torch.load('../output/first_derivative.pt')
     second_derivative = torch.load('../output/second_derivative.pt')
+    # mask_recto = torch.load('../output/mask_recto.pt')
+    # mask_verso = torch.load('../output/mask_verso.pt')
 
     # # using half percision to save memory
     # volume = volume
@@ -328,17 +390,56 @@ def torch_to_tif(tensor, path):
     volume = volume.astype(np.uint8)
     tifffile.imwrite(path, volume)
 
+def save_ply(recto_tensor_tuple, verso_tensor_tuple, corner_coords):
+    padding, grid_block_size = 50, 200
+
+    points_r_tensor, normals_r_tensor = recto_tensor_tuple
+    points_v_tensor, normals_v_tensor = verso_tensor_tuple
+
+    # Extract actual volume size from the oversized input block
+    points_r_tensor, normals_r_tensor = extract_size_tensor(points_r_tensor, normals_r_tensor, padding, grid_block_size+padding) # 0, 0, 0 is the minimum corner of the grid block
+    points_v_tensor, normals_v_tensor = extract_size_tensor(points_v_tensor, normals_v_tensor, padding, grid_block_size+padding) # 0, 0, 0 is the minimum corner of the grid block
+
+    ### Adjust the 3D coordinates of the points based on their position in the larger volume
+
+    # permute the axes to match the original volume
+    points_r_tensor = points_r_tensor[:, [1, 0, 2]]
+    normals_r_tensor = normals_r_tensor[:, [1, 0, 2]]
+    points_v_tensor = points_v_tensor[:, [1, 0, 2]]
+    normals_v_tensor = normals_v_tensor[:, [1, 0, 2]]
+
+    y_d, x_d, z_d = corner_coords
+    points_r_tensor += torch.tensor([y_d, z_d, x_d], dtype=points_r_tensor.dtype, device=points_r_tensor.device)
+    points_v_tensor += torch.tensor([y_d, z_d, x_d], dtype=points_v_tensor.dtype, device=points_v_tensor.device)
+
+    # Save the surface points and normals as a PLY file
+    points_r = points_r_tensor.cpu().numpy()
+    normals_r = normals_r_tensor.cpu().numpy()
+    points_v = points_v_tensor.cpu().numpy()
+    normals_v = normals_v_tensor.cpu().numpy()
+
+    save_template_v = "../output/point_cloud_recto/" + "cell_yxz_{:03}_{:03}_{:03}.ply"
+    save_template_r = "../output/point_cloud_verso/" + "cell_yxz_{:03}_{:03}_{:03}.ply"
+
+    file_x, file_y, file_z = corner_coords[0]//grid_block_size, corner_coords[1]//grid_block_size, corner_coords[2]//grid_block_size
+    surface_ply_filename_v = save_template_v.format(file_x, file_y, file_z)
+    surface_ply_filename_r = save_template_r.format(file_x, file_y, file_z)
+
+    save_surface_ply(points_r, normals_r, surface_ply_filename_r)
+    save_surface_ply(points_v, normals_v, surface_ply_filename_v)
+
 if __name__ == '__main__':
-    # path = '../2dtifs_8um_grids/cell_yxz_006_008_004.tif'
+    path = '../2dtifs_8um_grids/cell_yxz_006_008_004.tif'
+    corner_coords = (6 * 500, 8 * 500, 4 * 500)
 
-    # volume = tifffile.imread(path)
-    # volume = volume[:300, :300, :300]
-    # volume = np.uint8(volume//256)
-    # volume = torch.from_numpy(volume).float()  # Convert to float32 tensor
+    volume = tifffile.imread(path)
+    volume = volume[:300, :300, :300]
+    volume = np.uint8(volume//256)
+    volume = torch.from_numpy(volume).float()  # Convert to float32 tensor
 
-    # normal = np.array([0, 1, 0]) # z, y, x
-    # tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
-    # points_r_tensor, normals_r_tensor = tensor_tuple
+    normal = np.array([0, 1, 0]) # z, y, x
+    recto_tensor_tuple, verso_tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
+    save_ply(recto_tensor_tuple, verso_tensor_tuple, corner_coords)
 
     # tensor = torch.load('../output/blur.pt')
     # torch_to_tif(tensor, '../output/blur.tif')
@@ -358,25 +459,19 @@ if __name__ == '__main__':
     # tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
     # torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
 
-    # tensor = torch.load('../output/first_derivative.pt') * 255
+    # fd = torch.load('../output/first_derivative.pt') * 255
+    # tensor = torch.zeros(fd.shape + (3,))
+    # tensor[..., 0][fd < 0] = fd[fd < 0]
+    # tensor[..., 1][fd > 0] = fd[fd > 0]
     # torch_to_tif(tensor, '../output/first_derivative.tif')
 
     # tensor = torch.load('../output/second_derivative.pt') * 255
     # torch_to_tif(tensor, '../output/second_derivative.tif')
 
-    # tensor = torch.load('../output/mask_recto.pt')
-    # tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
-    # torch_to_tif(tensor, '../output/mask_recto.tif')
-
-    # tensor = torch.load('../output/mask_verso.pt')
-    # tensor = torch.where(tensor, torch.tensor(255), torch.tensor(0))
-    # torch_to_tif(tensor, '../output/mask_verso.tif')
-
-    origin = tifffile.imread('../output/origin.tif')
-    recto = tifffile.imread('../output/mask_recto.tif')
-    verso = tifffile.imread('../output/mask_verso.tif')
-    mix = np.stack([origin] * 3, axis=-1)
-    mix[recto > 100, 0] = 255
-    mix[verso > 100, 1] = 255
-    tifffile.imwrite('../output/mix.tif', mix)
-    
+    # origin = tifffile.imread('../output/origin.tif')
+    # recto = torch.load('../output/mask_recto.pt')
+    # verso = torch.load('../output/mask_verso.pt')
+    # recto_verso = np.stack([origin] * 3, axis=-1)
+    # recto_verso[verso, 0] = 255
+    # recto_verso[recto, 1] = 255
+    # tifffile.imwrite('../output/recto_verso.tif', recto_verso)

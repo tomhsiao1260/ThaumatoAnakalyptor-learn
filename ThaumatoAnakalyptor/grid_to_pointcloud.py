@@ -182,6 +182,41 @@ def umbilicus_xy_at_z(points_array, z_new):
     res = np.array([y_new, z_new, x_new])
     return res
 
+def extract_size_tensor(points, normals, grid_block_position_min, grid_block_position_max):
+    """
+    Extract points and corresponding normals that lie within the given size range.
+
+    Parameters:
+        points (torch.Tensor): The point coordinates, shape (n, 3).
+        normals (torch.Tensor): The point normals, shape (n, 3).
+        grid_block_position_min (int): The minimum block size.
+        grid_block_position_max (int): The maximum block size.
+
+    Returns:
+        filtered_points (torch.Tensor): The filtered points, shape (m, 3).
+        filtered_normals (torch.Tensor): The corresponding filtered normals, shape (m, 3).
+    """
+
+    # Convert min and max to tensors for comparison
+    min_tensor = torch.tensor([grid_block_position_min] * 3, dtype=points.dtype, device=points.device)
+    max_tensor = torch.tensor([grid_block_position_max] * 3, dtype=points.dtype, device=points.device)
+
+    # Create a mask to filter points within the specified range
+    mask_min = torch.all(points >= min_tensor, dim=-1)
+    mask_max = torch.all(points <= max_tensor, dim=-1)
+
+    # Combine the masks to get the final mask
+    mask = torch.logical_and(mask_min, mask_max)
+
+    # Apply the mask to filter points and corresponding normals
+    filtered_points = points[mask]
+    filtered_normals = normals[mask]
+
+    # Reposition the points to be relative to the grid block
+    filtered_points -= min_tensor
+
+    return filtered_points, filtered_normals
+
 # fixing the pointcloud because of computation with too short umbilicus
 def skip_computation_block(corner_coords, grid_block_size, umbilicus_points, maximum_distance=2500):
     if maximum_distance <= 0:
