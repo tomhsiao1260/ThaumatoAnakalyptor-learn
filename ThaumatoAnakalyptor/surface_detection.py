@@ -8,6 +8,7 @@ import os
 import tifffile
 import numpy as np
 import open3d as o3d
+from add_random_colors_to_pointcloud import add_random_colors
 
 ## sobel_filter_3d from https://github.com/lukeboi/scroll-viewer/blob/dev/server/app.py
 ### adjusted for my use case and improve efficiency
@@ -439,7 +440,10 @@ if __name__ == '__main__':
 
     normal = np.array([0, 1, 0]) # z, y, x
     recto_tensor_tuple, verso_tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
+
     save_ply(recto_tensor_tuple, verso_tensor_tuple, corner_coords)
+    add_random_colors('../output/point_cloud_recto/', '../output/point_cloud_colorized_recto/')
+    add_random_colors('../output/point_cloud_verso/', '../output/point_cloud_colorized_verso/')
 
     # tensor = torch.load('../output/blur.pt')
     # torch_to_tif(tensor, '../output/blur.tif')

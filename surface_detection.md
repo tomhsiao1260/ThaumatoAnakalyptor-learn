@@ -29,3 +29,7 @@
 #### save_ply
 
 有了 recto 和 verso，就能提取出這兩個面對應的 points 和 normals。然後再透過 extract_size_tensor 方法萃取出在 padding 前的點有那些，以及透過 corner_coords 資訊將這些點的原始位置還原，並存成 ply。其中 recto 會被放在 point_cloud_recto 資料夾，verso 會被放在 point_cloud_verso 資料夾，檔案會命名為 cell_yxz_A_B_C.ply 的形式，其中 A, B, C 是以 grid_block_size 的跨步 200 下去計算的。
+
+#### add_random_colors
+
+會把某個 point cloud 資料夾下的 .ply 加上隨機的顏色，然後存到另一個資料夾下。
