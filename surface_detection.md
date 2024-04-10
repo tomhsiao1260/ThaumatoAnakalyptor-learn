@@ -28,7 +28,13 @@
 
 #### save_ply
 
-有了 recto 和 verso，就能提取出這兩個面對應的 points 和 normals。然後再透過 extract_size_tensor 方法萃取出在 padding 前的點有那些，以及透過 corner_coords 資訊將這些點的原始位置還原，並存成 ply。其中 recto 會被放在 point_cloud_recto 資料夾，verso 會被放在 point_cloud_verso 資料夾，檔案會命名為 cell_yxz_A_B_C.ply 的形式，其中 A, B, C 是以 grid_block_size 的跨步 200 下去計算的。
+有了 recto 和 verso，就能提取出這兩個面對應的 points 和 normals。然後再透過 extract_size_tensor 方法萃取出在 padding 前的點有那些，以及透過 corner_coords 資訊將這些點的原始位置還原，並存成 ply。其中 recto 會被放在 point_cloud_recto 資料夾，verso 會被放在 point_cloud_verso 資料夾，檔案會命名為 cell_yxz_A_B_C.ply 的形式，其中 A, B, C 是以 corner_coords / grid_block_size 的整數部位下去計算的。另外，ply 因為是用 corner_coords 下去存的，所以會有個 500 的 offset。
+
+具體的例子是，如果在卷軸座標 (z, y, x) 為 (0, 300, 600) 的點作為 gird_block 的最小角落，下面幾點都是正確的：
+
+1. corner_coords is (300+500, 600+500, 0+500)
+2. cell_yxz_800//200_1100//200_500//200.ply
+3. coordinate of that point in .ply  is (300+500, 0+500, 600+500)
 
 #### add_random_colors
 

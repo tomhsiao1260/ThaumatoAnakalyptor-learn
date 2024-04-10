@@ -4,7 +4,7 @@
 
 #### GridDataset
 
-定義了怎麼訪問 volume 資料，是一系列邊長為 200 的正方體，稱作 grid blocks。所有的正方體的最小頂點資訊 (y, x, z) 會以 list 的形式存在 blocks_to_process 屬性內。其中 `__getitem__` 提供了訪問某筆資料的方法，主要會回傳一個 volume 資料，是一個 padding 後邊長為 300 的正方體。還會回傳其他附加資料，像是初估的法向量、角落的頂點座標等等。
+定義了怎麼訪問 volume 資料，是一系列邊長為 200 的正方體，稱作 grid blocks。所有正方體的最小頂點加 500 (y, x, z) 稱為 corner_coords，會以 list 的形式存在 blocks_to_process 屬性內。其中 `__getitem__` 提供了訪問某筆資料的方法，主要會回傳一個 volume 資料，是一個 padding 後邊長為 300 的正方體。還會回傳其他附加資料，像是初估的法向量、角落的頂點座標等等。
 
 定義好一個 dataset 後就可以放進 DataLoader 裡面，決定要怎麼批量訪問這些資料。
 

@@ -8,6 +8,7 @@ import os
 import tifffile
 import numpy as np
 import open3d as o3d
+from scipy.ndimage import binary_dilation
 from add_random_colors_to_pointcloud import add_random_colors
 
 ## sobel_filter_3d from https://github.com/lukeboi/scroll-viewer/blob/dev/server/app.py
@@ -299,52 +300,52 @@ def surface_detection(volume, global_reference_vector, blur_size=3, sobel_chunks
     # sobel_vectors_subsampled = torch.load('../output/sobel_sampled.pt')
     # sobel_vectors = torch.load('../output/sobel.pt')
     # vector_conv = torch.load('../output/vector_conv.pt')
-    adjusted_vectors_interp = torch.load('../output/adjusted_vectors_interp.pt')
-    first_derivative = torch.load('../output/first_derivative.pt')
-    second_derivative = torch.load('../output/second_derivative.pt')
+    # adjusted_vectors_interp = torch.load('../output/adjusted_vectors_interp.pt')
+    # first_derivative = torch.load('../output/first_derivative.pt')
+    # second_derivative = torch.load('../output/second_derivative.pt')
     # mask_recto = torch.load('../output/mask_recto.pt')
     # mask_verso = torch.load('../output/mask_verso.pt')
 
-    # # using half percision to save memory
-    # volume = volume
-    # # Blur the volume
-    # blur = uniform_blur3d(channels=1, size=blur_size, device=device)
-    # blurred_volume = blur(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-    # torch.save(blurred_volume, '../output/blur.pt')
+    # using half percision to save memory
+    volume = volume
+    # Blur the volume
+    blur = uniform_blur3d(channels=1, size=blur_size, device=device)
+    blurred_volume = blur(volume.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
+    torch.save(blurred_volume, '../output/blur.pt')
 
-    # # Apply Sobel filter to the blurred volume
-    # sobel_vectors = sobel_filter_3d(volume, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
-    # torch.save(sobel_vectors, '../output/sobel.pt')
+    # Apply Sobel filter to the blurred volume
+    sobel_vectors = sobel_filter_3d(volume, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
+    torch.save(sobel_vectors, '../output/sobel.pt')
 
-    # # Subsample the sobel_vectors
-    # sobel_stride = 10
-    # sobel_vectors_subsampled = sobel_vectors[::sobel_stride, ::sobel_stride, ::sobel_stride, :]
-    # torch.save(sobel_vectors_subsampled, '../output/sobel_sampled.pt')
+    # Subsample the sobel_vectors
+    sobel_stride = 10
+    sobel_vectors_subsampled = sobel_vectors[::sobel_stride, ::sobel_stride, ::sobel_stride, :]
+    torch.save(sobel_vectors_subsampled, '../output/sobel_sampled.pt')
 
-    # # Apply vector convolution to the Sobel vectors
-    # vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device)
-    # torch.save(vector_conv, '../output/vector_conv.pt')
+    # Apply vector convolution to the Sobel vectors
+    vector_conv = vector_convolution(sobel_vectors_subsampled, window_size=window_size, stride=stride, device=device)
+    torch.save(vector_conv, '../output/vector_conv.pt')
 
-    # # Adjust vectors to the global direction
-    # adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector)
-    # torch.save(adjusted_vectors, '../output/adjusted_vectors.pt')
+    # Adjust vectors to the global direction
+    adjusted_vectors = adjust_vectors_to_global_direction(vector_conv, global_reference_vector)
+    torch.save(adjusted_vectors, '../output/adjusted_vectors.pt')
 
-    # # Interpolate the adjusted vectors to the original size
-    # adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
-    # torch.save(adjusted_vectors_interp, '../output/adjusted_vectors_interp.pt')
+    # Interpolate the adjusted vectors to the original size
+    adjusted_vectors_interp = interpolate_to_original(sobel_vectors, adjusted_vectors)
+    torch.save(adjusted_vectors_interp, '../output/adjusted_vectors_interp.pt')
 
-    # # Project the Sobel result onto the adjusted vectors and calculate the norm
-    # first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
-    # fshape = first_derivative.shape
+    # Project the Sobel result onto the adjusted vectors and calculate the norm
+    first_derivative = adjusted_norm(sobel_vectors, adjusted_vectors_interp)
+    fshape = first_derivative.shape
     
-    # first_derivative = scale_to_0_1(first_derivative)
-    # torch.save(first_derivative, '../output/first_derivative.pt')
+    first_derivative = scale_to_0_1(first_derivative)
+    torch.save(first_derivative, '../output/first_derivative.pt')
 
-    # # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
-    # sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
-    # second_derivative = adjusted_norm(sobel_vectors_derivative, adjusted_vectors_interp)
-    # second_derivative = scale_to_0_1(second_derivative)
-    # torch.save(second_derivative, '../output/second_derivative.pt')
+    # Apply Sobel filter to the first derivative, project it onto the adjusted vectors, and calculate the norm
+    sobel_vectors_derivative = sobel_filter_3d(first_derivative, chunks=sobel_chunks, overlap=sobel_overlap, device=device)
+    second_derivative = adjusted_norm(sobel_vectors_derivative, adjusted_vectors_interp)
+    second_derivative = scale_to_0_1(second_derivative)
+    torch.save(second_derivative, '../output/second_derivative.pt')
 
     # Generate recto side of sheet
 
@@ -430,52 +431,54 @@ def save_ply(recto_tensor_tuple, verso_tensor_tuple, corner_coords):
     save_surface_ply(points_v, normals_v, surface_ply_filename_v)
 
 if __name__ == '__main__':
-    path = '../2dtifs_8um_grids/cell_yxz_006_008_004.tif'
-    corner_coords = (6 * 500, 8 * 500, 4 * 500)
+    # path = '../2dtifs_8um_grids/cell_yxz_006_008_004.tif'
+    # corner_coords = (6 * 500, 8 * 500, 4 * 500)
 
-    volume = tifffile.imread(path)
-    volume = volume[:300, :300, :300]
-    volume = np.uint8(volume//256)
-    volume = torch.from_numpy(volume).float()  # Convert to float32 tensor
+    # volume = tifffile.imread(path)
+    # volume = volume[:300, :300, :300]
+    # volume = np.uint8(volume//256)
+    # volume = torch.from_numpy(volume).float()  # Convert to float32 tensor
 
-    normal = np.array([0, 1, 0]) # z, y, x
-    recto_tensor_tuple, verso_tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.075, threshold_der2=0.002, convert_to_numpy=False)
+    # normal = np.array([0, -1, 0]) # z, y, x
+    # recto_tensor_tuple, verso_tensor_tuple = surface_detection(volume, normal, blur_size=11, window_size=9, stride=1, threshold_der=0.5, threshold_der2=0.002, convert_to_numpy=False)
 
-    save_ply(recto_tensor_tuple, verso_tensor_tuple, corner_coords)
-    add_random_colors('../output/point_cloud_recto/', '../output/point_cloud_colorized_recto/')
-    add_random_colors('../output/point_cloud_verso/', '../output/point_cloud_colorized_verso/')
+    # save_ply(recto_tensor_tuple, verso_tensor_tuple, corner_coords)
+    # add_random_colors('../output/point_cloud_recto/', '../output/point_cloud_colorized_recto/')
+    # add_random_colors('../output/point_cloud_verso/', '../output/point_cloud_colorized_verso/')
 
-    # tensor = torch.load('../output/blur.pt')
-    # torch_to_tif(tensor, '../output/blur.tif')
+    tensor = torch.load('../output/blur.pt')
+    torch_to_tif(tensor, '../output/blur.tif')
 
-    # tensor = torch.load('../output/sobel.pt')
-    # torch_to_tif(tensor, '../output/sobel.tif')
+    tensor = torch.load('../output/sobel.pt')
+    torch_to_tif(tensor, '../output/sobel.tif')
 
-    # tensor = torch.load('../output/sobel_sampled.pt')
-    # torch_to_tif(tensor, '../output/sobel_sampled.tif')
+    tensor = torch.load('../output/sobel_sampled.pt')
+    torch_to_tif(tensor, '../output/sobel_sampled.tif')
 
-    # tensor = torch.load('../output/vector_conv.pt') * 255
-    # torch_to_tif(tensor, '../output/vector_conv.tif')
+    tensor = torch.load('../output/vector_conv.pt') * 255
+    torch_to_tif(tensor, '../output/vector_conv.tif')
 
-    # tensor = torch.load('../output/adjusted_vectors.pt') * 255
-    # torch_to_tif(tensor, '../output/adjusted_vectors.tif')
+    tensor = torch.load('../output/adjusted_vectors.pt') * 255
+    torch_to_tif(tensor, '../output/adjusted_vectors.tif')
 
-    # tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
-    # torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
+    tensor = torch.load('../output/adjusted_vectors_interp.pt') * 255
+    torch_to_tif(tensor, '../output/adjusted_vectors_interp.tif')
 
-    # fd = torch.load('../output/first_derivative.pt') * 255
-    # tensor = torch.zeros(fd.shape + (3,))
-    # tensor[..., 0][fd < 0] = fd[fd < 0]
-    # tensor[..., 1][fd > 0] = fd[fd > 0]
-    # torch_to_tif(tensor, '../output/first_derivative.tif')
+    fd = torch.load('../output/first_derivative.pt') * 255
+    tensor = torch.zeros(fd.shape + (3,))
+    tensor[..., 0][fd < 0] = fd[fd < 0]
+    tensor[..., 1][fd > 0] = fd[fd > 0]
+    torch_to_tif(tensor, '../output/first_derivative.tif')
 
-    # tensor = torch.load('../output/second_derivative.pt') * 255
-    # torch_to_tif(tensor, '../output/second_derivative.tif')
+    tensor = torch.load('../output/second_derivative.pt') * 255
+    torch_to_tif(tensor, '../output/second_derivative.tif')
 
-    # origin = tifffile.imread('../output/origin.tif')
-    # recto = torch.load('../output/mask_recto.pt')
-    # verso = torch.load('../output/mask_verso.pt')
-    # recto_verso = np.stack([origin] * 3, axis=-1)
-    # recto_verso[verso, 0] = 255
-    # recto_verso[recto, 1] = 255
-    # tifffile.imwrite('../output/recto_verso.tif', recto_verso)
+    origin = tifffile.imread('../output/origin.tif')
+    recto = torch.load('../output/mask_recto.pt')
+    verso = torch.load('../output/mask_verso.pt')
+    recto = binary_dilation(recto, iterations=2)
+    verso = binary_dilation(verso, iterations=2)
+    recto_verso = np.stack([origin] * 3, axis=-1)
+    recto_verso[verso] = np.array([255, 0, 0])
+    recto_verso[recto] = np.array([0, 255, 0])
+    tifffile.imwrite('../output/recto_verso.tif', recto_verso)
