@@ -12,6 +12,34 @@ class PPMAndTextureModel():
   def __init__(self, max_side_triangle: int = 10):
     print("instantiating model")
     self.max_side_triangle = max_side_triangle
+    self.new_order = [2,1,0]
+
+  def ppm(self, pts, tri):
+    # pts T x W*H x 2
+    # tri_pts T x 3 x 2
+    # triangles 3
+    v0 = tri[:, 2, :].unsqueeze(1) - tri[:, 0, :].unsqueeze(1)
+    v1 = tri[:, 1, :].unsqueeze(1) - tri[:, 0, :].unsqueeze(1)
+    v2 = pts - tri[:, 0, :].unsqueeze(1)
+
+    dot00 = v0.pow(2).sum(dim=2)
+    dot01 = (v0 * v1).sum(dim=2)
+    dot11 = v1.pow(2).sum(dim=2)
+    dot02 = (v2 * v0).sum(dim=2)
+    dot12 = (v2 * v1).sum(dim=2)
+
+    invDenom = 1 / (dot00 * dot11 - dot01.pow(2))
+    u = (dot11 * dot02 - dot01 * dot12) * invDenom
+    v = (dot00 * dot12 - dot01 * dot02) * invDenom
+
+    is_inside = (u >= 0) & (v >= 0) & ((u + v) <= 1 )
+
+    w = 1 - u - v
+
+    bary_coords = torch.stack([u, v, w], dim=2)
+    bary_coords = normalize(bary_coords, p=1, dim=2)
+
+    return bary_coords, is_inside
 
   def create_grid_points_tensor(self, starting_points, w, h):
     device = starting_points.device
@@ -59,6 +87,38 @@ class PPMAndTextureModel():
       # create grid points tensor: T x W*H x 2
       grid_points = self.create_grid_points_tensor(min_uv_, self.max_side_triangle, self.max_side_triangle)
       del min_uv_
+
+      # Step 3: Compute Barycentric Coordinates for all Triangles grid_points
+      # baryicentric_coords: T x W*H x 3, is_inside: T x W*H
+      baryicentric_coords, is_inside = self.ppm(grid_points, uv_coords_triangles_)
+      grid_points = grid_points[is_inside] # S x 2
+
+      # adjust to new_order
+      vertices_ = vertices_[:, self.new_order, :]
+      normals_ = normals_[:, self.new_order, :]
+
+      # vertices: T x 3 x 3, normals: T x 3 x 3, baryicentric_coords: T x W*H x 3
+      coords = torch.einsum('ijk,isj->isk', vertices_, baryicentric_coords).squeeze()
+      norms = torch.einsum('ijk,isj->isk', normals_, baryicentric_coords).squeeze()
+      # Handle case where T == 1 by ensuring dimensions are not squeezed away
+      if coords.dim() == 2:
+        coords = coords.unsqueeze(0)
+      if norms.dim() == 2:
+        norms = norms.unsqueeze(0)
+      norms = normalize(norms,dim=2)
+      del vertices_, normals_, uv_coords_triangles_
+
+      # broadcast grid_coords to T x W*H x 3 -> S x 3
+      grid_coords_ = grid_coords_.unsqueeze(-2).expand(-1, baryicentric_coords.shape[1], -1)
+      del baryicentric_coords, grid_coords_
+
+      # coords: S x 3, norms: S x 3
+      coords = coords[is_inside]
+      norms = norms[is_inside]
+
+      # Poper axis order
+      coords = coords[:, self.new_order]
+      norms = norms[:, self.new_order]
 
 class MeshDataset(Dataset):
   def __init__(self, path, scroll):
