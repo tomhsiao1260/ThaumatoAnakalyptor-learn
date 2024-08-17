@@ -4,6 +4,31 @@ import einops
 import torch
 import torch.nn.functional as F
 
+from typing import Sequence
+
+def array_to_grid_sample(
+  array_coordinates: torch.Tensor, array_shape: Sequence[int]
+) -> torch.Tensor:
+  """Generate grids for `torch.nn.functional.grid_sample` from array coordinates.
+
+  These coordinates should be used with `align_corners=True` in
+  `torch.nn.functional.grid_sample`.
+
+
+  Parameters
+  ----------
+  array_coordinates: torch.Tensor
+    `(..., d)` array of d-dimensional coordinates.
+    Coordinates are in the range `[0, N-1]` for the `N` elements in each dimension.
+  array_shape: Sequence[int]
+      shape of the array being sampled at `array_coordinates`.
+  """
+  dtype, device = array_coordinates.dtype, array_coordinates.device
+  array_shape = torch.as_tensor(array_shape, dtype=dtype, device=device)
+  grid_sample_coordinates = (array_coordinates / (0.5 * array_shape - 0.5)) - 1
+  grid_sample_coordinates = torch.flip(grid_sample_coordinates, dims=(-1,))
+  return grid_sample_coordinates
+
 def extract_from_image_4d(
   image: torch.Tensor,
   image_index: torch.Tensor,
