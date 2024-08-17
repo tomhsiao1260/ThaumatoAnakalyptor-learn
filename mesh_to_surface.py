@@ -90,16 +90,56 @@ class PPMAndTextureModel(pl.LightningModule):
     self.new_order = [2,1,0] # [2,1,0], [2,0,1], [0,2,1], [0,1,2], [1,2,0], [1,0,2]
     super().__init__()
 
+  def create_grid_points_tensor(self, starting_points, w, h):
+    device = starting_points.device
+    n = starting_points.shape[0]
+        
+    # Generate all combinations of offsets in the grid
+    dx = torch.arange(w, device=device)  # Shape (w,)
+    dy = torch.arange(h, device=device)  # Shape (h,)
+        
+    # Create a meshgrid from dx and dy
+    mesh_dx, mesh_dy = torch.meshgrid(dx, dy, indexing='xy')  # Shapes (h, w)
+        
+    # Stack and reshape to create the complete offset grid
+    offset_grid = torch.stack((mesh_dx, mesh_dy), dim=2).view(-1, 2)  # Shape (w*h, 2)
+        
+    # Expand starting points for broadcasting
+    starting_points_expanded = starting_points.view(n, 1, 2)  # Shape (n, 1, 2)
+        
+    # Add starting points to offset grid (broadcasting in action)
+    grid_points = starting_points_expanded + offset_grid  # Shape (n, w*h, 2)
+        
+    return grid_points
+
   def forward(self, x):
     # origin
     # grid_coords: B x 3, grid_cell: B x W x W x W, vertices: B x T x 3 x 3, normals: B x T x 3 x 3, uv_coords_triangles: B x T x 3 x 2
+
     # grid_coords: T x 3, grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2
     grid_coords, grid_cells, vertices, normals, uv_coords_triangles = x
-    print(grid_coords)
-    print(grid_cells.shape)
-    print(vertices.shape)
-    print(normals.shape)
-    print(uv_coords_triangles.shape)
+
+    # Step 1: Compute AABBs for each triangle (only starting points of AABB rectangles)
+    min_uv, _ = torch.min(uv_coords_triangles, dim=1)
+    # Floor and ceil the UV coordinates
+    min_uv = torch.floor(min_uv)
+
+    nr_triangles = vertices.shape[0]
+    max_triangles_per_loop = 5000
+    values_list = []
+    grid_points_list = []
+    for i in range(0, nr_triangles, max_triangles_per_loop):
+      min_uv_ = min_uv[i:i+max_triangles_per_loop]
+      grid_coords_ = grid_coords[i:i+max_triangles_per_loop]
+      vertices_ = vertices[i:i+max_triangles_per_loop]
+      normals_ = normals[i:i+max_triangles_per_loop]
+      uv_coords_triangles_ = uv_coords_triangles[i:i+max_triangles_per_loop]
+
+      # Step 2: Generate Meshgrids for All Triangles
+      # create grid points tensor: T x W*H x 2
+      grid_points = self.create_grid_points_tensor(min_uv_, self.max_side_triangle, self.max_side_triangle)
+      del min_uv_
+
     return x
 
 # Custom collation function
