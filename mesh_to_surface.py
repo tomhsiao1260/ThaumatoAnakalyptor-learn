@@ -1,6 +1,7 @@
 ### Julian Schilliger - ThaumatoAnakalyptor - 2024
 
 import os
+import tempfile
 import numpy as np
 import nrrd
 import tifffile
@@ -14,17 +15,19 @@ class MyPredictionWriter(BasePredictionWriter):
   def __init__(self, save_path, image_size, r):
     super().__init__(write_interval="batch")  # or "epoch" for end of an epoch
 
-  def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction):
-    print(prediction)
+  def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int):
+    # print(prediction)
+    print("End predict")
 
 class MeshDataset(Dataset):
   def __init__(self, path, scroll, r=32):
     self.path = path
     self.scroll = scroll
-    self.grid_size = 768
+    self.grid_size = 500
     self.r = r+1
 
     self.load_mesh(path)
+    self.grids_to_process = [(3513, 1900, 3398)]
 
     working_path = os.path.dirname(path)
     write_path = os.path.join(working_path, "layers")
@@ -52,11 +55,32 @@ class MeshDataset(Dataset):
     self.triangles_vertices = self.vertices[self.triangles]
     self.triangles_normals = self.normals[self.triangles]
 
+  def load_grid(self, path):
+    with tifffile.TiffFile(path) as tif:
+      grid_cell = tif.asarray()
+    return grid_cell
+
   def __len__(self):
-    return 1
+    return len(self.grids_to_process)
 
   def __getitem__(self, idx):
-    return 123
+    grid_index = self.grids_to_process[idx]
+    vertices = self.triangles_vertices
+    normals = self.triangles_normals
+    uv = self.uv
+
+    # load grid cell from disk
+    grid_cell = self.load_grid(self.scroll)
+    grid_cell = grid_cell.astype(np.float32)
+
+    # Convert NumPy arrays to PyTorch tensors
+    vertices_tensor = torch.tensor(vertices, dtype=torch.float32)
+    normals_tensor = torch.tensor(normals, dtype=torch.float32)
+    uv_tensor = torch.tensor(uv, dtype=torch.float32)
+    grid_cell_tensor = torch.tensor(grid_cell, dtype=torch.float32)
+    grid_coord = torch.tensor(np.array(grid_index), dtype=torch.int32)
+
+    return grid_coord, grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
 
 class PPMAndTextureModel(pl.LightningModule):
   def __init__(self, r: int = 32, max_side_triangle: int = 10):
@@ -123,15 +147,15 @@ def ppm_and_texture(obj_path, scroll):
 
   # Initialize the dataset and dataloader
   dataset = MeshDataset(obj_path, scroll)
-  dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1, prefetch_factor=3)
+  dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
 
   writer = dataset.get_writer()
-  trainer = pl.Trainer(callbacks=[writer], strategy="ddp")
+  trainer = pl.Trainer(callbacks=[writer], strategy="ddp", logger=False)
   # trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
 
-  # trainer.predict(model, dataloaders=dataloader, return_predictions=False)
+  trainer.predict(model, dataloaders=dataloader, return_predictions=False)
 
 if __name__ == '__main__':
   obj = '../ink-explorer/cubes/03513_01900_03398/03513_01900_03398_20230702185753.obj'
