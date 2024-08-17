@@ -91,9 +91,15 @@ class PPMAndTextureModel(pl.LightningModule):
     super().__init__()
 
   def forward(self, x):
-    # grid_coords: T x 3, grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2, grid_index: T
-    # grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index = x
-    print(x)
+    # origin
+    # grid_coords: B x 3, grid_cell: B x W x W x W, vertices: B x T x 3 x 3, normals: B x T x 3 x 3, uv_coords_triangles: B x T x 3 x 2
+    # grid_coords: T x 3, grid_cell: B x W x W x W, vertices: T x 3 x 3, normals: T x 3 x 3, uv_coords_triangles: T x 3 x 2
+    grid_coords, grid_cells, vertices, normals, uv_coords_triangles = x
+    print(grid_coords)
+    print(grid_cells.shape)
+    print(vertices.shape)
+    print(normals.shape)
+    print(uv_coords_triangles.shape)
     return x
 
 # Custom collation function
@@ -104,7 +110,6 @@ def custom_collate_fn(batch):
     vertices = []
     normals = []
     uv_coords_triangles = []
-    grid_index = []
     grid_coords = []
     
     # Loop through each batch and aggregate its items
@@ -122,7 +127,6 @@ def custom_collate_fn(batch):
       vertices.append(vertice)
       normals.append(normal)
       uv_coords_triangles.append(uv_coords_triangle)
-      grid_index.extend([i]*vertice.shape[0])
       grid_coord = grid_coord.unsqueeze(0).expand(vertice.shape[0], -1)
       grid_coords.extend(grid_coord)
             
@@ -134,11 +138,10 @@ def custom_collate_fn(batch):
     vertices = torch.concat(vertices, dim=0)
     normals = torch.concat(normals, dim=0)
     uv_coords_triangles = torch.concat(uv_coords_triangles, dim=0)
-    grid_index = torch.tensor(grid_index, dtype=torch.int32)
     grid_coords = torch.stack(grid_coords, dim=0)
     
     # Return a single batch containing all aggregated items
-    return grid_coords, grid_cells, vertices, normals, uv_coords_triangles, grid_index
+    return grid_coords, grid_cells, vertices, normals, uv_coords_triangles
   except:
     return None, None, None, None, None, None
 
@@ -147,7 +150,7 @@ def ppm_and_texture(obj_path, scroll):
 
   # Initialize the dataset and dataloader
   dataset = MeshDataset(obj_path, scroll)
-  dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
+  dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=0)
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
 
