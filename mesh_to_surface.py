@@ -26,7 +26,8 @@ class MyPredictionWriter(BasePredictionWriter):
     self.image_size = image_size
 
   def write_on_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, prediction, batch_indices, batch, batch_idx: int, dataloader_idx: int):
-    self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
+    self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint8, name="surface_volume")
+    # self.surface_volume_np, self.shm = self.create_shared_array((2*self.r+1, self.image_size[0], self.image_size[1]), np.uint16, name="surface_volume")
     # Gather the shared memory name
     torch.distributed.barrier()
 
@@ -118,15 +119,15 @@ class MeshDataset(Dataset):
     mesh = o3d.io.read_triangle_mesh(path)
     self.mesh = mesh
 
-    y_size, x_size = 1000, 1000
+    x_size, y_size = 1738 * 3, 1351 * 3
 
     self.vertices = np.asarray(self.mesh.vertices)
     self.normals = np.asarray(self.mesh.vertex_normals)
     self.triangles = np.asarray(self.mesh.triangles)
     uv = np.asarray(self.mesh.triangle_uvs).reshape(-1, 3, 2)
     # scale numpy UV coordinates to the image size
-    self.uv = uv * np.array([y_size, x_size])
-    self.image_size = (y_size, x_size)
+    self.uv = uv * np.array([x_size, y_size])
+    self.image_size = (x_size, y_size)
 
     # vertices of triangles
     self.triangles_vertices = self.vertices[self.triangles]
@@ -400,7 +401,7 @@ def ppm_and_texture(obj_path, scroll):
   writer.write_tif()
 
 if __name__ == '__main__':
-  obj = '../ink-explorer/cubes/03513_01900_03398/03513_01900_03398_20230702185753.obj'
-  scroll = '../ink-explorer/cubes/03513_01900_03398/03513_01900_03398_volume.tiff'
+  obj = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_20230702185753.obj'
+  scroll = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_volume.tif'
 
   ppm_and_texture(obj, scroll=scroll)
