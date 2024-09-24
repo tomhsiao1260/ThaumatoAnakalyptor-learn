@@ -105,7 +105,8 @@ class MeshDataset(Dataset):
     self.r = r+1
 
     self.load_mesh(path)
-    self.grids_to_process = [(3513, 1900, 3398)]
+    self.grids_to_process = [(3400, 1900, 3513)]
+    # self.grids_to_process = [(3513, 1900, 3400)]
 
     working_path = os.path.dirname(path)
     write_path = os.path.join(working_path, "layers")
