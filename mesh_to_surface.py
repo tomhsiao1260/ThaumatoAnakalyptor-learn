@@ -98,22 +98,13 @@ class MyPredictionWriter(BasePredictionWriter):
     tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
 
 class MeshDataset(Dataset):
-  def __init__(self, path, scroll, r=32):
+  def __init__(self, path, scroll):
     self.path = path
     self.scroll = scroll
     self.grid_size = 500
-    self.r = r+1
 
     self.load_mesh(path)
     self.grids_to_process = [(3400, 1900, 3513)]
-    # self.grids_to_process = [(3513, 1900, 3400)]
-
-    working_path = os.path.dirname(path)
-    write_path = os.path.join(working_path, "layers")
-    self.writer = MyPredictionWriter(write_path, self.image_size, r)
-
-  def get_writer(self):
-    return self.writer
 
   def load_mesh(self, path):
     """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
@@ -393,7 +384,14 @@ def ppm_and_texture(obj_path, scroll):
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
 
-  writer = dataset.get_writer()
+  r=32
+  x_size, y_size = 1738 * 3, 1351 * 3
+  image_size = (x_size, y_size)
+
+  working_path = os.path.dirname(obj_path)
+  write_path = os.path.join(working_path, "layers")
+  writer = MyPredictionWriter(write_path, image_size, r)
+
   trainer = pl.Trainer(callbacks=[writer], strategy="ddp", logger=False)
   # trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
 
