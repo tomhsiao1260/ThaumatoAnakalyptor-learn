@@ -8,6 +8,8 @@ import nrrd
 import tifffile
 import open3d as o3d
 import torch
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import pytorch_lightning as pl
 from torch.nn.functional import normalize
 from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning.callbacks import BasePredictionWriter
@@ -150,7 +152,7 @@ class MeshDataset(Dataset):
 
     return grid_coord, grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
 
-class PPMAndTextureModel():
+class PPMAndTextureModel(pl.LightningModule):
   def __init__(self, r: int = 32, max_side_triangle: int = 10):
     print("instantiating model")
     self.r = r
@@ -380,18 +382,20 @@ def ppm_and_texture(obj_path, scroll):
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
 
-  for data in dataloader:
-    values, grid_points = model.forward(data)
+  r=32
+  x_size, y_size = 1738 * 3, 1351 * 3
+  image_size = (x_size, y_size)
 
-    # r=32
-    # x_size, y_size = 1738 * 3, 1351 * 3
-    # image_size = (x_size, y_size)
+  working_path = os.path.dirname(obj_path)
+  write_path = os.path.join(working_path, "layers")
+  writer = MyPredictionWriter(write_path, image_size, r)
 
-    # working_path = os.path.dirname(obj_path)
-    # write_path = os.path.join(working_path, "layers")
-    # writer = MyPredictionWriter(write_path, image_size, r)
+  trainer = pl.Trainer(callbacks=[writer], strategy="ddp", logger=False)
+  # trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
 
-    # writer.write_tif()
+  trainer.predict(model, dataloaders=dataloader, return_predictions=False)
+
+  writer.write_tif()
 
 if __name__ == '__main__':
   obj = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_20230702185753.obj'
