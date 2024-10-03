@@ -98,13 +98,13 @@ class MyPredictionWriter(BasePredictionWriter):
     tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
 
 class MeshDataset(Dataset):
-  def __init__(self, path, scroll, image_size, r=32):
+  def __init__(self, path, scroll, grids_to_process, grid_size, image_size, r=32):
     self.path = path
     self.scroll = scroll
     self.grid_size = grid_size
     self.r = r+1
 
-    self.grids_to_process = []
+    self.grids_to_process = grids_to_process
     self.load_mesh(path, image_size)
 
     working_path = os.path.dirname(path)
@@ -132,14 +132,6 @@ class MeshDataset(Dataset):
     # vertices of triangles
     self.triangles_vertices = self.vertices[self.triangles]
     self.triangles_normals = self.normals[self.triangles]
-
-    # grid size, grids to process (only one grid to process)
-    boxMin = np.min(self.vertices, axis=0).astype(int)
-    boxMax = np.max(self.vertices, axis=0).astype(int)
-    boxSize = np.max(boxMax - boxMin).astype(int)
-
-    self.grid_size = boxSize
-    self.grids_to_process.append((boxMin[0], boxMin[1], boxMin[2])) # (x, y, z)
 
   def load_grid(self, path):
     with tifffile.TiffFile(path) as tif:
@@ -392,10 +384,13 @@ def custom_collate_fn(batch):
     return None, None, None, None, None, None
 
 def ppm_and_texture(obj_path, scroll):
+  # Some params
   image_size = (1738 * 3, 1351 * 3) # w, h
+  grids_to_process = [(3400, 1900, 3513)] # (x, y, z)
+  grid_size = 500
 
   # Initialize the dataset and dataloader
-  dataset = MeshDataset(obj_path, scroll, image_size)
+  dataset = MeshDataset(obj_path, scroll, grids_to_process, grid_size, image_size)
   dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=0)
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
