@@ -8,6 +8,8 @@ import nrrd
 import tifffile
 import open3d as o3d
 import torch
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import pytorch_lightning as pl
 from torch.nn.functional import normalize
 from torch.utils.data import Dataset, DataLoader
 from pytorch_lightning.callbacks import BasePredictionWriter
@@ -96,20 +98,28 @@ class MyPredictionWriter(BasePredictionWriter):
     tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
 
 class MeshDataset(Dataset):
-  def __init__(self, path, scroll):
+  def __init__(self, path, scroll, image_size, r=32):
     self.path = path
     self.scroll = scroll
-    self.grid_size = 500
+    self.grid_size = grid_size
+    self.r = r+1
 
-    self.load_mesh(path)
-    self.grids_to_process = [(3400, 1900, 3513)]
+    self.grids_to_process = []
+    self.load_mesh(path, image_size)
 
-  def load_mesh(self, path):
+    working_path = os.path.dirname(path)
+    write_path = os.path.join(working_path, "layers")
+    self.writer = MyPredictionWriter(write_path, self.image_size, r)
+
+  def get_writer(self):
+    return self.writer
+
+  def load_mesh(self, path, image_size):
     """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
     mesh = o3d.io.read_triangle_mesh(path)
     self.mesh = mesh
 
-    x_size, y_size = 1738 * 3, 1351 * 3
+    x_size, y_size = image_size
 
     self.vertices = np.asarray(self.mesh.vertices)
     self.normals = np.asarray(self.mesh.vertex_normals)
@@ -122,6 +132,14 @@ class MeshDataset(Dataset):
     # vertices of triangles
     self.triangles_vertices = self.vertices[self.triangles]
     self.triangles_normals = self.normals[self.triangles]
+
+    # grid size, grids to process (only one grid to process)
+    boxMin = np.min(self.vertices, axis=0).astype(int)
+    boxMax = np.max(self.vertices, axis=0).astype(int)
+    boxSize = np.max(boxMax - boxMin).astype(int)
+
+    self.grid_size = boxSize
+    self.grids_to_process.append((boxMin[0], boxMin[1], boxMin[2])) # (x, y, z)
 
   def load_grid(self, path):
     with tifffile.TiffFile(path) as tif:
@@ -150,7 +168,7 @@ class MeshDataset(Dataset):
 
     return grid_coord, grid_cell_tensor, vertices_tensor, normals_tensor, uv_tensor
 
-class PPMAndTextureModel():
+class PPMAndTextureModel(pl.LightningModule):
   def __init__(self, r: int = 32, max_side_triangle: int = 10):
     print("instantiating model")
     self.r = r
@@ -374,24 +392,20 @@ def custom_collate_fn(batch):
     return None, None, None, None, None, None
 
 def ppm_and_texture(obj_path, scroll):
+  image_size = (1738 * 3, 1351 * 3) # w, h
+
   # Initialize the dataset and dataloader
-  dataset = MeshDataset(obj_path, scroll)
+  dataset = MeshDataset(obj_path, scroll, image_size)
   dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=0)
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
 
-  for data in dataloader:
-    values, grid_points = model.forward(data)
+  writer = dataset.get_writer()
+  trainer = pl.Trainer(callbacks=[writer], strategy="ddp", logger=False)
+  # trainer = pl.Trainer(callbacks=[writer], accelerator='gpu', devices=int(gpus), strategy="ddp")
+  trainer.predict(model, dataloaders=dataloader, return_predictions=False)
 
-    # r=32
-    # x_size, y_size = 1738 * 3, 1351 * 3
-    # image_size = (x_size, y_size)
-
-    # working_path = os.path.dirname(obj_path)
-    # write_path = os.path.join(working_path, "layers")
-    # writer = MyPredictionWriter(write_path, image_size, r)
-
-    # writer.write_tif()
+  writer.write_tif()
 
 if __name__ == '__main__':
   obj = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_20230702185753.obj'
