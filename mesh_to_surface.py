@@ -387,7 +387,11 @@ def ppm_and_texture(obj_path, scroll):
   # Some params
   image_size = (1738 * 3, 1351 * 3) # w, h
   grids_to_process = [(3400, 1900, 3513)] # (x, y, z)
-  grid_size = 500
+  grid_size = 768
+
+  # image_size = (2000, 2000) # w, h
+  # grids_to_process = [(2432, 2304, 10624)] # (x, y, z)
+  # grid_size = 768
 
   # Initialize the dataset and dataloader
   dataset = MeshDataset(obj_path, scroll, grids_to_process, grid_size, image_size)
@@ -405,5 +409,7 @@ def ppm_and_texture(obj_path, scroll):
 if __name__ == '__main__':
   obj = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_20230702185753.obj'
   scroll = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_volume.tif'
+  # obj = '../ink-explorer/cubes/10624_02304_02432/10624_02304_02432.obj'
+  # scroll = '../ink-explorer/cubes/10624_02304_02432/10624_02304_02432_volume.tif'
 
   ppm_and_texture(obj, scroll=scroll)
