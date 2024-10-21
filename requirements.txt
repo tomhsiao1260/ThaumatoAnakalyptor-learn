@@ -78,3 +78,4 @@ urllib3==2.2.1
 Werkzeug==3.0.2
 yarl==1.9.4
 zipp==3.18.1
+pillow

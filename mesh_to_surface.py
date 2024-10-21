@@ -8,6 +8,7 @@ import nrrd
 import tifffile
 import open3d as o3d
 import torch
+from PIL import Image
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pytorch_lightning as pl
 from torch.nn.functional import normalize
@@ -87,25 +88,35 @@ class MyPredictionWriter(BasePredictionWriter):
       for future in tqdm(as_completed(futures), desc="Writing TIF"):
         future.result()
 
-    # Create Composite max image from all tifs
-    composite_image = np.zeros((self.surface_volume_np.shape[1], self.surface_volume_np.shape[2]), dtype=np.float32)
-    for i in range(self.surface_volume_np.shape[0]):
-      composite_image = np.maximum(composite_image, self.surface_volume_np[i])
+    # # Create Composite max image from all tifs
+    # composite_image = np.zeros((self.surface_volume_np.shape[1], self.surface_volume_np.shape[2]), dtype=np.float32)
+    # for i in range(self.surface_volume_np.shape[0]):
+    #   composite_image = np.maximum(composite_image, self.surface_volume_np[i])
 
-    composite_image = composite_image.astype(np.uint16)
-    composite_image = composite_image.T
-    composite_image = composite_image[::-1, :]
-    tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
+    # composite_image = composite_image.astype(np.uint16)
+    # composite_image = composite_image.T
+    # composite_image = composite_image[::-1, :]
+    # tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
+
+  # Generate empty mask image
+  def write_mask(self):
+    working_path = os.path.dirname(self.save_path)
+    filename = os.path.join(working_path, f"{z:05}_{y:05}_{x:05}_mask.png")
+    mask = self.surface_volume_np[0]
+    mask = np.fliplr(mask)
+    mask[mask > 0] = 255
+    image = Image.fromarray(mask.transpose(1, 0))
+    image.save(filename)
 
 class MeshDataset(Dataset):
-  def __init__(self, path, scroll, grids_to_process, grid_size, image_size, r=32):
+  def __init__(self, path, scroll, grids_to_process, grid_size, r=32):
     self.path = path
     self.scroll = scroll
     self.grid_size = grid_size
     self.r = r+1
 
     self.grids_to_process = grids_to_process
-    self.load_mesh(path, image_size)
+    self.load_mesh(path)
 
     working_path = os.path.dirname(path)
     write_path = os.path.join(working_path, "layers")
@@ -114,19 +125,26 @@ class MeshDataset(Dataset):
   def get_writer(self):
     return self.writer
 
-  def load_mesh(self, path, image_size):
+  def load_mesh(self, path):
     """Load the mesh from the given path and extract the vertices, normals, triangles, and UV coordinates."""
     mesh = o3d.io.read_triangle_mesh(path)
     self.mesh = mesh
 
-    x_size, y_size = image_size
-
     self.vertices = np.asarray(self.mesh.vertices)
     self.normals = np.asarray(self.mesh.vertex_normals)
     self.triangles = np.asarray(self.mesh.triangles)
-    uv = np.asarray(self.mesh.triangle_uvs).reshape(-1, 3, 2)
+    self.uv = np.asarray(self.mesh.triangle_uvs).reshape(-1, 3, 2)
+
     # scale numpy UV coordinates to the image size
-    self.uv = uv * np.array([x_size, y_size])
+    x_size, y_size = 0, 0
+    for i in range(10):
+      deltaW = self.uv_distance([i*0.1, 0.5], [i*0.1+0.1, 0.5])
+      deltaH = self.uv_distance([0.5, i*0.1], [0.5, i*0.1+0.1])
+      x_size += deltaW
+      y_size += deltaH
+
+    x_size, y_size = int(x_size), int(y_size)
+    self.uv *= np.array([x_size, y_size])
     self.image_size = (x_size, y_size)
 
     # vertices of triangles
@@ -137,6 +155,22 @@ class MeshDataset(Dataset):
     with tifffile.TiffFile(path) as tif:
       grid_cell = tif.asarray()
     return grid_cell
+
+  def uv_distance(self, uva=[0, 0], uvb=[1, 1]):
+    distance_a = np.linalg.norm(self.uv - uva, axis=-1)
+    distance_b = np.linalg.norm(self.uv - uvb, axis=-1)
+
+    closest_indices_a = np.argmin(distance_a)
+    closest_indices_b = np.argmin(distance_b)
+
+    row_a, col_a = np.unravel_index(closest_indices_a, distance_a.shape)
+    row_b, col_b = np.unravel_index(closest_indices_b, distance_b.shape)
+
+    closest_vertices_a = self.vertices[self.triangles][row_a, col_a]
+    closest_vertices_b = self.vertices[self.triangles][row_b, col_b]
+
+    d = np.linalg.norm(closest_vertices_a - closest_vertices_b, axis=-1)
+    return d
 
   def __len__(self):
     return len(self.grids_to_process)
@@ -383,18 +417,12 @@ def custom_collate_fn(batch):
   except:
     return None, None, None, None, None, None
 
-def ppm_and_texture(obj_path, scroll):
-  # Some params
-  image_size = (1738 * 3, 1351 * 3) # w, h
-  grids_to_process = [(3400, 1900, 3513)] # (x, y, z)
-  grid_size = 768
-
-  # image_size = (2000, 2000) # w, h
-  # grids_to_process = [(2432, 2304, 10624)] # (x, y, z)
-  # grid_size = 768
+def ppm_and_texture(obj_path, scroll, grid_coords, grid_size):
+  z, y, x = grid_coords
+  grids_to_process = [(x, y, z)] # (x, y, z)
 
   # Initialize the dataset and dataloader
-  dataset = MeshDataset(obj_path, scroll, grids_to_process, grid_size, image_size)
+  dataset = MeshDataset(obj_path, scroll, grids_to_process, grid_size)
   dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=0)
   # dataloader = DataLoader(dataset, batch_size=1, collate_fn=custom_collate_fn, shuffle=False, num_workers=1, prefetch_factor=3)
   model = PPMAndTextureModel()
@@ -405,11 +433,13 @@ def ppm_and_texture(obj_path, scroll):
   trainer.predict(model, dataloaders=dataloader, return_predictions=False)
 
   writer.write_tif()
+  writer.write_mask()
 
 if __name__ == '__main__':
-  obj = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_20230702185753.obj'
-  scroll = '../ink-explorer/cubes/03513_01900_03400/03513_01900_03400_volume.tif'
-  # obj = '../ink-explorer/cubes/10624_02304_02432/10624_02304_02432.obj'
-  # scroll = '../ink-explorer/cubes/10624_02304_02432/10624_02304_02432_volume.tif'
+  label, grid_size = 1, 768
+  z, y, x = 3513, 1900, 3400
 
-  ppm_and_texture(obj, scroll=scroll)
+  obj = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_{label:02}.obj'
+  scroll = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_volume.tif'
+
+  ppm_and_texture(obj, scroll, (z, y, x), grid_size)
