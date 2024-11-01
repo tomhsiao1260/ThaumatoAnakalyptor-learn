@@ -1,30 +1,17 @@
-from flask import Flask, jsonify
-import requests
-from parse_args import parse_args
+from pipeline_api import Node
 from mesh_to_surface import ppm_and_texture
 
-app = Flask(__name__)
-
-id_value, from_value = parse_args()
-
-@app.route("/")
-def process():
-
-    inputs = requests.get("http://127.0.0.1:" + from_value).json()
-
-    handler()
-
-    outputs = {"data": {"counter": 10}}
-
-    return jsonify(outputs)
-
-def handler():
+def handler(inputs):
+    z, y, x = 10624, 2304, 2432
     label, grid_size = 1, 768
-    z, y, x = 3513, 1900, 3400
 
-    obj = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_{label:02}.obj'
+    obj = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/label_{label:02}/{z:05}_{y:05}_{x:05}_{label:02}.obj'
     scroll = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_volume.tif'
-    ppm_and_texture(obj, scroll, (z, y, x), grid_size)
+    mask = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/label_{label:02}/{z:05}_{y:05}_{x:05}_mask.png'
+
+    ppm_and_texture(obj, scroll, mask, (z, y, x), grid_size)
+
+    return {**inputs, "data": {"counter": 3}}
 
 if __name__ == "__main__":
-    app.run(port=id_value)
+    Node(handler)

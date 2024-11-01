@@ -99,14 +99,12 @@ class MyPredictionWriter(BasePredictionWriter):
     # tifffile.imsave(os.path.join(os.path.dirname(self.save_path), "composite.tif"), composite_image)
 
   # Generate empty mask image
-  def write_mask(self):
-    working_path = os.path.dirname(self.save_path)
-    filename = os.path.join(working_path, f"{z:05}_{y:05}_{x:05}_mask.png")
+  def write_mask(self, mask_dir):
     mask = self.surface_volume_np[0]
     mask = np.fliplr(mask)
     mask[mask > 0] = 255
     image = Image.fromarray(mask.transpose(1, 0))
-    image.save(filename)
+    image.save(mask_dir)
 
 class MeshDataset(Dataset):
   def __init__(self, path, scroll, grids_to_process, grid_size, r=32):
@@ -142,8 +140,18 @@ class MeshDataset(Dataset):
       deltaH = self.uv_distance([0.5, i*0.1], [0.5, i*0.1+0.1])
       x_size += deltaW
       y_size += deltaH
+    for i in range(10):
+      deltaW = self.uv_distance([i*0.1, 0.25], [i*0.1+0.1, 0.25])
+      deltaH = self.uv_distance([0.25, i*0.1], [0.25, i*0.1+0.1])
+      x_size += deltaW
+      y_size += deltaH
+    for i in range(10):
+      deltaW = self.uv_distance([i*0.1, 0.75], [i*0.1+0.1, 0.75])
+      deltaH = self.uv_distance([0.75, i*0.1], [0.75, i*0.1+0.1])
+      x_size += deltaW
+      y_size += deltaH
 
-    x_size, y_size = int(x_size), int(y_size)
+    x_size, y_size = int(x_size/3), int(y_size/3)
     self.uv *= np.array([x_size, y_size])
     self.image_size = (x_size, y_size)
 
@@ -417,7 +425,7 @@ def custom_collate_fn(batch):
   except:
     return None, None, None, None, None, None
 
-def ppm_and_texture(obj_path, scroll, grid_coords, grid_size):
+def ppm_and_texture(obj_path, scroll, mask, grid_coords, grid_size):
   z, y, x = grid_coords
   grids_to_process = [(x, y, z)] # (x, y, z)
 
@@ -433,7 +441,7 @@ def ppm_and_texture(obj_path, scroll, grid_coords, grid_size):
   trainer.predict(model, dataloaders=dataloader, return_predictions=False)
 
   writer.write_tif()
-  writer.write_mask()
+  writer.write_mask(mask)
 
 if __name__ == '__main__':
   label, grid_size = 1, 768
@@ -441,5 +449,6 @@ if __name__ == '__main__':
 
   obj = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_{label:02}.obj'
   scroll = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_volume.tif'
+  mask = f'/Users/yao/Desktop/cubes/{z:05}_{y:05}_{x:05}/{z:05}_{y:05}_{x:05}_mask.png'
 
-  ppm_and_texture(obj, scroll, (z, y, x), grid_size)
+  ppm_and_texture(obj, scroll, mask, (z, y, x), grid_size)
